@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 
 interface LeadDetails {
   booking: Record<string, unknown>;
@@ -11,17 +12,20 @@ interface LeadDetails {
   formEvents: Array<Record<string, unknown>>;
 }
 
-export default function LeadDetailPage({ params }: { params: { id: string } }) {
+export default function LeadDetailPage() {
+  const params = useParams<{ id: string }>();
+  const leadId = params?.id;
   const [data, setData] = useState<LeadDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!leadId) return;
     const fetchLead = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem('admin_token');
-        const response = await fetch(`/scheduler/api/leads/${params.id}`, {
+        const response = await fetch(`/scheduler/api/leads/${leadId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -46,7 +50,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
     };
 
     fetchLead();
-  }, [params.id]);
+  }, [leadId]);
 
   if (loading) {
     return (
