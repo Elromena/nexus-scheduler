@@ -7,8 +7,6 @@ import * as schema from '@/lib/db/schema';
 import { getGeoFromHeaders, anonymizeIP, getCountryName } from '@/lib/utils/geo';
 import { validateTrackingEvent } from '@/lib/utils/validation';
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

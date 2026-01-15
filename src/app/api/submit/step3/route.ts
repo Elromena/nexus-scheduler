@@ -9,8 +9,6 @@ import { toISODateTime } from '@/lib/utils/dates';
 import { getHubSpotClient } from '@/lib/integrations/hubspot';
 import { getGoogleCalendarClient, DEFAULT_TIME_SLOTS } from '@/lib/integrations/google-calendar';
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

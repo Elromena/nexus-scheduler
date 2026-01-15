@@ -4,8 +4,6 @@ import { drizzle } from 'drizzle-orm/d1';
 import { sql, gte, and, eq, desc } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
-export const runtime = 'edge';
-
 // Simple auth check
 function isAuthorized(request: NextRequest): boolean {
   const { env } = getCloudflareContext();

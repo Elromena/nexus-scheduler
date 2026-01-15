@@ -6,8 +6,6 @@ import * as schema from '@/lib/db/schema';
 import { validateStep1 } from '@/lib/utils/validation';
 import { getHubSpotClient } from '@/lib/integrations/hubspot';
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

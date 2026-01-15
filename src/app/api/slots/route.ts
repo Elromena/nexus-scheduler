@@ -6,8 +6,6 @@ import * as schema from '@/lib/db/schema';
 import { getGoogleCalendarClient, DEFAULT_TIME_SLOTS } from '@/lib/integrations/google-calendar';
 import { isPastDate, isWeekend } from '@/lib/utils/dates';
 
-export const runtime = 'edge';
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
