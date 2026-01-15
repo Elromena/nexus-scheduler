@@ -110,7 +110,7 @@ export class GoogleCalendarClient {
     this.accessToken = data.access_token;
     this.tokenExpiry = Date.now() + (data.expires_in * 1000);
     
-    return this.accessToken;
+    return this.accessToken as string;
   }
 
   /**
