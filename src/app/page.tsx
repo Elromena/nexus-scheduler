@@ -79,6 +79,14 @@ export default function SchedulerPage() {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.parent !== window) {
+      document.body.classList.add('embedded-scheduler');
+      return () => document.body.classList.remove('embedded-scheduler');
+    }
+  }, []);
+
   const updateFormData = (data: Partial<FormData>) => {
     setFormData(prev => ({ ...prev, ...data }));
   };

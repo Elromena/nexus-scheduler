@@ -3,14 +3,42 @@
 import { useState } from 'react';
 
 export default function SettingsPage() {
-  const [testMode, setTestMode] = useState(true);
-  const [saved, setSaved] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<{
+    testMode: boolean;
+    hubspotConfigured: boolean;
+    googleServiceAccountConfigured: boolean;
+    googleCalendarEmailConfigured: boolean;
+  } | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    // Settings are managed via environment variables in Webflow Cloud
-    // This page is mainly for documentation
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const handleVerify = async () => {
+    setChecking(true);
+    setStatusError(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('admin_token');
+          window.location.reload();
+          return;
+        }
+        throw new Error('Failed to check status');
+      }
+
+      const result = await response.json();
+      setStatus(result.data);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'Failed to check status');
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -83,6 +111,51 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Integration Status */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Verify Integrations</h2>
+          <button onClick={handleVerify} className="btn-outline" disabled={checking}>
+            {checking ? 'Checking...' : 'Verify integrations'}
+          </button>
+        </div>
+
+        {statusError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {statusError}
+          </div>
+        )}
+
+        {status && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold">HubSpot</div>
+              <div className={status.hubspotConfigured ? 'text-green-700' : 'text-red-700'}>
+                {status.hubspotConfigured ? 'Configured' : 'Missing token'}
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold">Google Service Account</div>
+              <div className={status.googleServiceAccountConfigured ? 'text-green-700' : 'text-red-700'}>
+                {status.googleServiceAccountConfigured ? 'Configured' : 'Missing credentials'}
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold">Google Calendar Email</div>
+              <div className={status.googleCalendarEmailConfigured ? 'text-green-700' : 'text-red-700'}>
+                {status.googleCalendarEmailConfigured ? 'Configured' : 'Missing email'}
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold">Test Mode</div>
+              <div className={status.testMode ? 'text-amber-700' : 'text-green-700'}>
+                {status.testMode ? 'Enabled' : 'Disabled'}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Scheduler Trigger */}
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Scheduler Trigger</h2>
@@ -101,11 +174,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {saved && (
-        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg">
-          Settings saved!
-        </div>
-      )}
     </div>
   );
 }
