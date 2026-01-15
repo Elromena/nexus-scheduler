@@ -273,8 +273,8 @@ export default function LeadDetailPage() {
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Form Events</h2>
         <div className="space-y-3">
-          {formEvents.map((event) => (
-            <div key={String(event.id)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3">
+          {formEvents.map((event, index) => (
+            <div key={String(event.id || index)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">
                   {String(event.eventType)} {event.step ? `(Step ${event.step})` : ''}
@@ -292,8 +292,8 @@ export default function LeadDetailPage() {
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Page Views</h2>
         <div className="space-y-2">
-          {data.pageViews.map((view) => (
-            <div key={String(view.id)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3 text-sm">
+          {data.pageViews.map((view, index) => (
+            <div key={String(view.id || index)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3 text-sm">
               <div className="font-medium text-slate-900 break-all">{String(view.pageUrl || '—')}</div>
               <div className="text-xs text-slate-500">{formatDateTime(view.timestamp)}</div>
             </div>
