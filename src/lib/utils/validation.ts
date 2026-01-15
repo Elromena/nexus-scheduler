@@ -46,7 +46,9 @@ export const trackingEventSchema = z.object({
     device: z.object({
       deviceType: z.string().optional(),
       browser: z.string().optional(),
+      browserVersion: z.string().optional(),
       os: z.string().optional(),
+      osVersion: z.string().optional(),
       screenResolution: z.string().optional(),
       userAgent: z.string().optional(),
     }).optional(),
