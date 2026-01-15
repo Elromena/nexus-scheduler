@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { FormData } from '@/app/page';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/utils/dates';
 
@@ -14,13 +15,23 @@ interface StepSuccessProps {
 }
 
 export default function StepSuccess({ formData, bookingResult }: StepSuccessProps) {
-  const handleClose = () => {
-    // If embedded in iframe, try to close the modal
+  const thankYouPath = '/thank-you';
+
+  const redirectToThankYou = () => {
     if (window.parent !== window) {
-      window.parent.postMessage({ type: 'nexus-scheduler-close' }, '*');
+      window.parent.location.href = thankYouPath;
+    } else {
+      window.location.href = thankYouPath;
     }
-    // Otherwise, could redirect or just stay on page
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      redirectToThankYou();
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <div className="text-center animate-fade-in">
@@ -83,8 +94,8 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
       </div>
 
       {/* CTA */}
-      <button onClick={handleClose} className="btn-primary max-w-xs mx-auto">
-        Return to site
+      <button onClick={redirectToThankYou} className="btn-primary max-w-xs mx-auto">
+        Continue
       </button>
 
       {/* Add to calendar hint */}
