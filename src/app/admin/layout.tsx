@@ -64,10 +64,10 @@ export default function AdminLayout({
   }
 
   const navItems = [
-    { href: '/scheduler/admin', label: 'Dashboard', icon: '📊' },
-    { href: '/scheduler/admin/leads', label: 'Leads', icon: '👥' },
-    { href: '/scheduler/admin/analytics', label: 'Analytics', icon: '📈' },
-    { href: '/scheduler/admin/settings', label: 'Settings', icon: '⚙️' },
+    { href: '/admin', label: 'Dashboard', icon: '📊' },
+    { href: '/admin/leads', label: 'Leads', icon: '👥' },
+    { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
+    { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
   ];
 
   return (
