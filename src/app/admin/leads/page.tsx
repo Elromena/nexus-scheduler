@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
 interface Lead {
@@ -161,7 +162,12 @@ export default function LeadsPage() {
                 {data?.leads.map((lead) => (
                   <tr key={lead.id}>
                     <td className="font-medium">
-                      {lead.firstName} {lead.lastName}
+                      <Link
+                        href={`/admin/leads/${lead.id}`}
+                        className="text-slate-900 hover:text-primary-600 hover:underline"
+                      >
+                        {lead.firstName} {lead.lastName}
+                      </Link>
                     </td>
                     <td>{lead.email}</td>
                     <td>

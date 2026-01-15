@@ -54,18 +54,29 @@ export default function SchedulerPage() {
     googleMeetLink: string | null;
   } | null>(null);
 
-  // Get visitor ID from tracker on mount
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.NexusTracker) {
-      setVisitorId(window.NexusTracker.getVisitorId());
-    }
-  }, []);
+    let attempts = 0;
+    const maxAttempts = 20;
 
-  // Track form opened when component mounts
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.NexusTracker) {
+    const initTracker = () => {
+      if (typeof window === 'undefined') return;
+      if (!window.NexusTracker) return;
+
+      setVisitorId(window.NexusTracker.getVisitorId());
       window.NexusTracker.trackFormOpened();
-    }
+      return true;
+    };
+
+    if (initTracker()) return;
+
+    const interval = window.setInterval(() => {
+      attempts += 1;
+      if (initTracker() || attempts >= maxAttempts) {
+        window.clearInterval(interval);
+      }
+    }, 200);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   const updateFormData = (data: Partial<FormData>) => {
@@ -73,12 +84,14 @@ export default function SchedulerPage() {
   };
 
   const goToStep = (newStep: number) => {
-    // Track step change
+    // Track step change (steps 1-3 only)
     if (typeof window !== 'undefined' && window.NexusTracker) {
-      if (newStep > step) {
+      if (newStep > step && step >= 1) {
         window.NexusTracker.trackStepCompleted(step);
       }
-      window.NexusTracker.trackStepStarted(newStep);
+      if (newStep >= 1 && newStep !== step) {
+        window.NexusTracker.trackStepStarted(newStep);
+      }
     }
     setStep(newStep);
   };

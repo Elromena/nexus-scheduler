@@ -23,6 +23,18 @@ export async function POST(request: NextRequest) {
     const event = validation.data;
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
+
+    if (env.DEBUG_LOGGING === 'true') {
+      console.log('track_event', {
+        event: event.event,
+        visitorId: event.visitorId,
+        sessionId: event.sessionId,
+        url: event.data.url,
+        referrer: event.data.referrer,
+        utm: event.data.utm,
+        firstTouchUtm: event.data.firstTouchUtm,
+      });
+    }
     
     // Get geo data from Cloudflare headers
     const geo = getGeoFromHeaders(request.headers);

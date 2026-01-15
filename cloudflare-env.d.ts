@@ -9,6 +9,7 @@ interface CloudflareEnv {
   GOOGLE_CALENDAR_EMAIL: string;
   ADMIN_PASSWORD: string;
   TEST_MODE: string;
+  DEBUG_LOGGING?: string;
   APP_URL: string;
 }
 

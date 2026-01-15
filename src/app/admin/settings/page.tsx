@@ -62,6 +62,13 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-slate-600">Set to "true" to enable test mode (skips HubSpot/Google integrations)</p>
           </div>
+
+          <div className="p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <code className="text-sm font-mono bg-slate-200 px-2 py-1 rounded">DEBUG_LOGGING</code>
+            </div>
+            <p className="text-sm text-slate-600">Set to "true" to log tracking payloads in runtime logs for debugging</p>
+          </div>
         </div>
       </div>
 
