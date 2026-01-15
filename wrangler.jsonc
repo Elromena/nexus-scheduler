@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nexus-scheduler",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // SQLite Database binding - Webflow Cloud will generate the database_id
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nexus-scheduler-db",
+      "database_id": ""
+    }
+  ]
+}
