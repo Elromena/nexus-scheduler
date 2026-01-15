@@ -11,12 +11,12 @@
   "observability": {
     "enabled": true
   },
-  // SQLite Database binding - Webflow Cloud will generate the database_id
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "nexus-scheduler-db",
-      "database_id": ""
+      "database_id": "123456789",
+      "migrations_dir": "./src/lib/db/migrations"
     }
   ]
 }
