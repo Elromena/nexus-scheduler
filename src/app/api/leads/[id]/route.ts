@@ -16,7 +16,7 @@ function isAuthorized(request: NextRequest): boolean {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,7 +25,7 @@ export async function GET(
   try {
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
-    const leadId = params.id;
+    const { id: leadId } = await context.params;
 
     const booking = await db
       .select()
