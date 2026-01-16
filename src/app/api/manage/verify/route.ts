@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, gte, and, isNull } from 'drizzle-orm';
+import { eq, gte, and, isNull, or } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, code } = body;
+
+    console.log(`MANAGE VERIFY: Attempt for email: ${email}`);
 
     if (!email || !code) {
       return NextResponse.json(
@@ -19,6 +21,7 @@ export async function POST(request: NextRequest) {
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
     const now = new Date().toISOString();
+    const todayDate = now.split('T')[0];
 
     // Find valid verification code
     const verificationCode = await db
@@ -33,6 +36,7 @@ export async function POST(request: NextRequest) {
       .get();
 
     if (!verificationCode) {
+      console.log(`MANAGE VERIFY: Invalid/expired code for ${email}`);
       return NextResponse.json(
         { success: false, error: 'Invalid or expired code' },
         { status: 400 }
@@ -44,6 +48,8 @@ export async function POST(request: NextRequest) {
       .update(schema.verificationCodes)
       .set({ usedAt: now })
       .where(eq(schema.verificationCodes.id, verificationCode.id));
+
+    console.log(`MANAGE VERIFY: Code verified for ${email}. Fetching bookings...`);
 
     // Get upcoming bookings for this email
     const bookings = await db
@@ -62,10 +68,15 @@ export async function POST(request: NextRequest) {
       .from(schema.bookings)
       .where(and(
         eq(schema.bookings.email, email.toLowerCase()),
-        gte(schema.bookings.scheduledDate, now.split('T')[0]),
-        eq(schema.bookings.status, 'pending')
+        gte(schema.bookings.scheduledDate, todayDate),
+        or(
+          eq(schema.bookings.status, 'pending'),
+          eq(schema.bookings.status, 'confirmed')
+        )
       ))
       .orderBy(schema.bookings.scheduledDate);
+
+    console.log(`MANAGE VERIFY: Found ${bookings.length} upcoming bookings for ${email}`);
 
     // Generate a session token for subsequent requests
     const sessionToken = Buffer.from(`${email.toLowerCase()}:${Date.now()}`).toString('base64');

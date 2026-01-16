@@ -185,17 +185,29 @@ export async function POST(request: NextRequest) {
     if (event.isNewSession) {
       const utmData = event.data.utm || {};
       
-      await db.insert(schema.sessions).values({
-        id: event.sessionId,
-        visitorId: event.visitorId,
-        startedAt: now,
-        pageCount: 1,
-        entryPage: event.data.url || null,
-        referrer: event.data.referrer || null,
-        utmSource: utmData.source || null,
-        utmMedium: utmData.medium || null,
-        utmCampaign: utmData.campaign || null,
-      });
+      // Check if session already exists to avoid UNIQUE constraint error
+      const existingSession = await db
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.id, event.sessionId))
+        .get();
+
+      if (!existingSession) {
+        if (debugMode) console.log('Creating new session:', event.sessionId);
+        await db.insert(schema.sessions).values({
+          id: event.sessionId,
+          visitorId: event.visitorId,
+          startedAt: now,
+          pageCount: 1,
+          entryPage: event.data.url || null,
+          referrer: event.data.referrer || null,
+          utmSource: utmData.source || null,
+          utmMedium: utmData.medium || null,
+          utmCampaign: utmData.campaign || null,
+        });
+      } else {
+        if (debugMode) console.log('Session already exists, skipping create:', event.sessionId);
+      }
     } else {
       // Update session
       await db
