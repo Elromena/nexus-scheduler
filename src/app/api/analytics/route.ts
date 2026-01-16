@@ -244,8 +244,28 @@ export async function GET(request: NextRequest) {
     const startDateStr = toDateStr(startDate);
     const endDateStr = toDateStr(endDate);
 
-    // Get current period metrics
-    const currentMetrics = await getMetricsForRange(db, startDateStr, endDateStr);
+    // Get previous period dates for comparison
+    const duration = endDate.getTime() - startDate.getTime();
+    const prevEndDate = new Date(startDate.getTime() - 1);
+    const prevStartDate = new Date(prevEndDate.getTime() - duration);
+    const prevStartDateStr = toDateStr(prevStartDate);
+    const prevEndDateStr = toDateStr(prevEndDate);
+
+    // Get current and previous period metrics
+    const [currentMetrics, previousMetrics] = await Promise.all([
+      getMetricsForRange(db, startDateStr, endDateStr),
+      getMetricsForRange(db, prevStartDateStr, prevEndDateStr),
+    ]);
+
+    // Calculate changes
+    const changes = {
+      visitors: calcChange(currentMetrics.visitors, previousMetrics.visitors),
+      sessions: calcChange(currentMetrics.sessions, previousMetrics.sessions),
+      pageViews: calcChange(currentMetrics.pageViews, previousMetrics.pageViews),
+      formOpens: calcChange(currentMetrics.formOpens, previousMetrics.formOpens),
+      bookings: calcChange(currentMetrics.bookings, previousMetrics.bookings),
+      conversionRate: currentMetrics.conversionRate - previousMetrics.conversionRate,
+    };
 
     // Get trend, funnel, and breakdowns
     const [
@@ -340,13 +360,33 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        period: { preset, startDate: startDateStr, endDate: endDateStr },
-        overview: currentMetrics,
+        period: { 
+          preset, 
+          startDate: startDateStr, 
+          endDate: endDateStr,
+          previousStartDate: prevStartDateStr,
+          previousEndDate: prevEndDateStr
+        },
+        overview: {
+          ...currentMetrics, // for Dashboard compatibility
+          current: currentMetrics,
+          previous: previousMetrics,
+          changes
+        },
         trend,
         traffic: { sources: trafficSources, referrers: topReferrers, landingPages: topLandingPages },
         devices: { types: deviceBreakdown, browsers: browserBreakdown },
         locations: { countries: countryBreakdown, cities: cityBreakdown },
         funnel: { steps: funnelSteps },
+        // Dashboard extensions
+        recentActivity,
+        pipeline,
+        hotLeads,
+        // Legacy support for dashboard
+        recentVisitors: hotLeads, 
+        trafficSources: trafficSources,
+      }
+    });
         // Dashboard extensions
         recentActivity,
         pipeline,
