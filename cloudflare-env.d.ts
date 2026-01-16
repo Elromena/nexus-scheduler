@@ -6,11 +6,11 @@ interface CloudflareEnv {
   // Environment variables
   HUBSPOT_ACCESS_TOKEN: string;
   GOOGLE_SERVICE_ACCOUNT: string;
-  GOOGLE_CALENDAR_EMAIL: string;
+  GOOGLE_CALENDAR_EMAIL?: string; // Optional - can be set in admin settings
   ADMIN_PASSWORD: string;
-  TEST_MODE: string;
   DEBUG_LOGGING?: string;
-  APP_URL: string;
+  APP_URL?: string;
+  RESEND_API_KEY?: string; // For sending verification emails
 }
 
 // D1 Database types
