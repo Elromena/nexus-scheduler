@@ -34,7 +34,8 @@ interface ReportTableProps {
   onPageChange: (page: number) => void;
   onExport: () => void;
   labelHeader?: string;
-  monthlyBreakdown?: Array<{ month: string; [key: string]: string | number | null }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  monthlyBreakdown?: Array<Record<string, any>>;
   itemKey?: string; // The key to match items in monthlyBreakdown (e.g., 'referrer', 'landingPage')
 }
 
@@ -95,7 +96,7 @@ export default function ReportTable({
 
     // Sort by month descending
     return itemData
-      .map(row => ({ month: row.month as string, count: row.count as number }))
+      .map(row => ({ month: String(row.month || ''), count: Number(row.count || 0) }))
       .sort((a, b) => b.month.localeCompare(a.month));
   };
 
