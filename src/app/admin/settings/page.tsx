@@ -2,6 +2,195 @@
 
 import { useState, useEffect } from 'react';
 
+// Debug Section Component
+function DebugSection() {
+  const [loading, setLoading] = useState(false);
+  const [debugData, setDebugData] = useState<{
+    summary: {
+      testMode: boolean;
+      envTestMode: boolean;
+      dbTestMode: boolean;
+      hubspotConfigured: boolean;
+      googleConfigured: boolean;
+      debugLogging: boolean;
+    };
+    recentBookings: Array<{
+      id: string;
+      email: string;
+      createdAt: string;
+      hubspotContactId: string | null;
+      hubspotDealId: string | null;
+      googleEventId: string | null;
+      googleMeetLink: string | null;
+      status: string;
+    }>;
+  } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }> | null>(null);
+
+  const fetchDebugData = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/debug', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setDebugData(result.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch debug data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testIntegrations = async () => {
+    setTesting(true);
+    setTestResults(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/debug', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ testType: 'all' }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setTestResults(result.results);
+      }
+    } catch (err) {
+      console.error('Failed to test integrations:', err);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDebugData();
+  }, []);
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-slate-900">Debug & Diagnostics</h2>
+        <div className="flex gap-2">
+          <button onClick={fetchDebugData} className="btn-outline text-sm" disabled={loading}>
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+          <button onClick={testIntegrations} className="btn-primary text-sm" disabled={testing}>
+            {testing ? 'Testing...' : 'Test Integrations'}
+          </button>
+        </div>
+      </div>
+
+      {/* Test Results */}
+      {testResults && (
+        <div className="mb-4 space-y-2">
+          {Object.entries(testResults).map(([key, result]) => (
+            <div 
+              key={key}
+              className={`p-3 rounded-lg text-sm ${
+                result.success 
+                  ? 'bg-green-50 border border-green-200 text-green-700' 
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}
+            >
+              <strong className="capitalize">{key}:</strong> {result.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Configuration Summary */}
+      {debugData?.summary && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-slate-600 uppercase mb-3">Configuration Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className={`p-3 rounded-lg text-sm ${debugData.summary.testMode ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+              <div className="font-medium">Test Mode</div>
+              <div className={debugData.summary.testMode ? 'text-amber-700' : 'text-green-700'}>
+                {debugData.summary.testMode ? 'ON (integrations disabled)' : 'OFF (live)'}
+              </div>
+            </div>
+            <div className={`p-3 rounded-lg text-sm ${debugData.summary.hubspotConfigured ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="font-medium">HubSpot</div>
+              <div className={debugData.summary.hubspotConfigured ? 'text-green-700' : 'text-red-700'}>
+                {debugData.summary.hubspotConfigured ? 'Configured' : 'Not configured'}
+              </div>
+            </div>
+            <div className={`p-3 rounded-lg text-sm ${debugData.summary.googleConfigured ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="font-medium">Google Calendar</div>
+              <div className={debugData.summary.googleConfigured ? 'text-green-700' : 'text-red-700'}>
+                {debugData.summary.googleConfigured ? 'Configured' : 'Not configured'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Bookings */}
+      {debugData?.recentBookings && debugData.recentBookings.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-slate-600 uppercase mb-3">Recent Bookings (Integration Status)</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="text-left px-3 py-2">Email</th>
+                  <th className="text-left px-3 py-2">HubSpot</th>
+                  <th className="text-left px-3 py-2">Google Meet</th>
+                  <th className="text-left px-3 py-2">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {debugData.recentBookings.map((booking) => (
+                  <tr key={booking.id}>
+                    <td className="px-3 py-2">{booking.email}</td>
+                    <td className="px-3 py-2">
+                      {booking.hubspotContactId ? (
+                        booking.hubspotContactId.startsWith('test-') ? (
+                          <span className="text-amber-600">Test ID</span>
+                        ) : (
+                          <span className="text-green-600" title={booking.hubspotContactId}>Connected</span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {booking.googleMeetLink ? (
+                        <a href={booking.googleMeetLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline">
+                          Link
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {new Date(booking.createdAt || '').toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+        <strong>Note:</strong> For full runtime logs, go to Webflow Cloud Dashboard → Runtime logs. 
+        Make sure <code className="bg-blue-100 px-1 rounded">DEBUG_LOGGING=true</code> is set in environment variables.
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   // Integration status
   const [checking, setChecking] = useState(false);
@@ -394,6 +583,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Debug & Diagnostics */}
+      <DebugSection />
 
       {/* Danger Zone */}
       <div className="bg-white rounded-lg border border-red-200 p-6">
