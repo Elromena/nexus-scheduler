@@ -39,6 +39,10 @@ export async function POST(request: NextRequest) {
       .where(eq(schema.bookings.id, bookingId))
       .get();
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reschedule/route.ts:43',message:'Reschedule check',data:{bookingFound:!!booking,bookingStatus:booking?.status,emailInToken:email,emailInBooking:booking?.email},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
+
     if (!booking) {
       return NextResponse.json(
         { success: false, error: 'Booking not found' },
@@ -53,7 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (booking.status !== 'pending') {
+    if (booking.status !== 'pending' && booking.status !== 'confirmed') {
       return NextResponse.json(
         { success: false, error: 'This booking cannot be rescheduled' },
         { status: 400 }
