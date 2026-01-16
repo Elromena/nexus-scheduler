@@ -151,15 +151,16 @@ body.embedded-scheduler .scheduler-card {
    CALENDAR
    ========================================= */
 
-.calendar-container {
-  @apply grid gap-6;
-}
-
-@media (min-width: 640px) {
   .calendar-container {
-    grid-template-columns: 1.4fr 0.6fr;
+    @apply grid gap-6;
+    grid-template-columns: 1fr;
   }
-}
+
+  @media (min-width: 600px) {
+    .calendar-container {
+      grid-template-columns: 1.3fr 0.7fr;
+    }
+  }
 
 .calendar-grid {
   @apply grid grid-cols-7 gap-2 text-center;
@@ -198,16 +199,23 @@ body.embedded-scheduler .scheduler-card {
    TIME SLOTS
    ========================================= */
 
-.time-slots {
-  @apply grid grid-cols-2 gap-3;
-  @apply max-h-80 overflow-y-auto pr-2;
-}
+  .time-slots {
+    @apply grid grid-cols-2 gap-2;
+    @apply max-h-80 overflow-y-auto pr-1 overflow-x-hidden;
+  }
 
-.time-slot {
-  @apply py-3 px-4 border border-slate-200 rounded-lg;
-  @apply text-sm font-medium text-slate-700 text-center;
-  @apply cursor-pointer transition-all duration-200;
-}
+  @media (max-width: 480px) {
+    .time-slots {
+      @apply grid-cols-2;
+    }
+  }
+
+  .time-slot {
+    @apply py-2.5 px-2 border border-slate-200 rounded-lg;
+    @apply text-[13px] font-medium text-slate-700 text-center;
+    @apply cursor-pointer transition-all duration-200;
+    @apply flex flex-col items-center justify-center min-h-[50px] whitespace-nowrap;
+  }
 
 .time-slot:hover {
   @apply border-primary-500 text-primary-600 bg-primary-50;

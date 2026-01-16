@@ -118,29 +118,7 @@ export default function StepCalendar({
   const formatSlotForDisplay = (slot: string) => {
     if (!selectedDate) return slot;
     try {
-      // Create a Date object assuming the slot is in the HOST'S timezone
-      // We'll use the Date constructor with the timezone offset trick
       const [hour, min] = slot.split(':').map(Number);
-      
-      // Construct date string that includes the host's timezone offset
-      // This is the most reliable way in standard JS
-      const hostTime = new Intl.DateTimeFormat('en-US', {
-        timeZone: calendarConfig.hostTimezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      }).format(new Date()); // Get current offset basically
-      
-      // Actually, standard JS toLocaleTimeString is enough if we just want to show the user's local time
-      // But we need to KNOW what the universal time of that slot is.
-      
-      // Let's use a robust approach: 
-      // 1. Construct a date string in the format YYYY-MM-DDTHH:MM:SS
-      // 2. Append the host's current offset
       
       // Get host offset for the target date
       const dummyDate = new Date(`${selectedDate}T${slot}:00`);
@@ -149,7 +127,6 @@ export default function StepCalendar({
         timeZoneName: 'shortOffset'
       }).format(dummyDate).split('GMT')[1] || '+00:00';
       
-      // Convert "+1" to "+01:00"
       const formattedOffset = hostOffsetStr.includes(':') 
         ? hostOffsetStr 
         : hostOffsetStr.startsWith('+') || hostOffsetStr.startsWith('-')
@@ -159,11 +136,20 @@ export default function StepCalendar({
       const isoWithOffset = `${selectedDate}T${slot}:00${formattedOffset}`;
       const localDate = new Date(isoWithOffset);
 
-      return localDate.toLocaleTimeString([], {
+      // Return a 2-line format for the grid: Time + AM/PM
+      const timeStr = localDate.toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
       });
+
+      const [time, period] = timeStr.split(' ');
+      return (
+        <div className="flex flex-col leading-tight">
+          <span className="text-sm font-bold">{time}</span>
+          <span className="text-[10px] uppercase opacity-60 font-semibold">{period}</span>
+        </div>
+      );
     } catch (e) {
       return slot;
     }
