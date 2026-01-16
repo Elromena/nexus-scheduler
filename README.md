@@ -100,10 +100,11 @@ Go to Environment → Environment Variables and add:
 | Variable | Value | Secret |
 |----------|-------|--------|
 | `HUBSPOT_ACCESS_TOKEN` | Your HubSpot token | Yes |
-| `GOOGLE_SERVICE_ACCOUNT` | Service account JSON | Yes |
-| `GOOGLE_CALENDAR_EMAIL` | Calendar email | No |
+| `GOOGLE_SERVICE_ACCOUNT` | Service account JSON (stringified) | Yes |
 | `ADMIN_PASSWORD` | Admin login password | Yes |
-| `TEST_MODE` | true or false | No |
+| `DEBUG_LOGGING` | true (optional, for troubleshooting) | No |
+
+**Note:** `TEST_MODE` and `GOOGLE_CALENDAR_EMAIL` are configured in Admin → Settings (not env vars).
 
 ### Step 6: Deploy
 
@@ -119,13 +120,9 @@ Click "Publish" in the Webflow Designer to make changes live.
 
 ## Webflow Site Integration
 
-### Add Tracking Script
-
-In Webflow: Site Settings → Custom Code → Head Code:
-
-```html
-<script src="https://yourdomain.com/scheduler/tracker.js" defer></script>
-```
+The footer code below handles both:
+1. Loading the tracker script automatically
+2. Opening the scheduler in a modal
 
 ### Add Scheduler Button
 
@@ -139,46 +136,95 @@ Option 2: Open in modal - Add this class to any button:
 nexus-trigger-btn
 ```
 
-Then add to Footer Code:
+Then add to **Footer Code** (Site Settings → Custom Code):
 
 ```html
 <script>
-document.querySelectorAll('.nexus-trigger-btn').forEach(btn => {
-  btn.addEventListener('click', function(e) {
-    e.preventDefault();
-    const overlay = document.createElement('div');
-    overlay.id = 'nexus-modal';
-    overlay.innerHTML = `
-      <div id="nexus-overlay" style="position:fixed;inset:0;background:rgba(255,255,255,0.95);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
-        <div id="nexus-modal-container" style="position:relative;width:100%;max-width:650px;min-height:400px;background:#fff;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.12);margin:auto;">
-          <button onclick="this.closest('#nexus-modal').remove()" style="position:absolute;top:12px;right:12px;width:32px;height:32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:50%;font-size:20px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;">&times;</button>
-          <iframe id="nexus-iframe" src="/scheduler" style="width:100%;height:600px;border:none;border-radius:12px;"></iframe>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-    
-    // Handle close
-    overlay.querySelector('#nexus-overlay').addEventListener('click', function(e) {
-      if (e.target === this) overlay.remove();
-    });
-    overlay.addEventListener('remove', () => document.body.style.overflow = '');
-    
-    // Listen for height updates from iframe
-    window.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'nexus-scheduler-height') {
-        const iframe = document.getElementById('nexus-iframe');
-        if (iframe) {
-          const newHeight = Math.min(e.data.height + 40, window.innerHeight - 60);
-          iframe.style.height = newHeight + 'px';
-        }
+(function () {
+  const host = window.location.hostname;
+  const isStaging = host.includes('webflow.io');
+
+  const schedulerBase = isStaging
+    ? 'https://blockchain-team.webflow.io'
+    : 'https://www.blockchain-ads.com';
+
+  // Load tracker
+  const s = document.createElement('script');
+  s.src = `${schedulerBase}/scheduler/tracker.js`;
+  s.defer = true;
+  document.head.appendChild(s);
+
+  // Listen for height updates from iframe
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'nexus-scheduler-height') {
+      const iframe = document.getElementById('nexus-scheduler-iframe');
+      if (iframe) {
+        // Set iframe height directly, with max based on viewport
+        const newHeight = Math.min(e.data.height + 20, window.innerHeight - 100);
+        iframe.style.height = newHeight + 'px';
       }
+    }
+  });
+
+  // Modal trigger
+  document.querySelectorAll('.nexus-trigger-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      const overlay = document.createElement('div');
+      overlay.id = 'nexus-modal';
+      overlay.innerHTML = `
+        <div id="nexus-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;">
+          <div id="nexus-iframe-wrapper" style="position:relative;width:100%;max-width:650px;margin:auto;">
+            <button onclick="this.closest('#nexus-modal').remove();document.body.style.overflow='';" style="position:absolute;top:-12px;right:-12px;width:36px;height:36px;background:white;border:none;border-radius:50%;font-size:20px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,0.2);">&times;</button>
+            
+            <!-- Loading State -->
+            <div id="nexus-loader" style="position:absolute;inset:0;background:white;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;">
+              <div style="width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:nexus-spin 0.8s linear infinite;"></div>
+              <div style="margin-top:16px;color:#64748b;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">Loading scheduler...</div>
+            </div>
+            
+            <iframe 
+              id="nexus-scheduler-iframe" 
+              src="${schedulerBase}/scheduler" 
+              style="width:100%;height:650px;min-height:500px;border:none;border-radius:16px;background:white;opacity:0;transition:opacity 0.3s ease,height 0.3s ease;"
+              onload="document.getElementById('nexus-loader').style.display='none';this.style.opacity='1';"
+            ></iframe>
+          </div>
+        </div>
+        <style>
+          @keyframes nexus-spin {
+            to { transform: rotate(360deg); }
+          }
+        </style>
+      `;
+      document.body.appendChild(overlay);
+      document.body.style.overflow = 'hidden';
+      
+      // Close on overlay click (not wrapper)
+      overlay.querySelector('#nexus-overlay').addEventListener('click', function(ev) {
+        if (ev.target === this) {
+          overlay.remove();
+          document.body.style.overflow = '';
+        }
+      });
     });
   });
-});
+
+  // Close on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('nexus-modal');
+      if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+      }
+    }
+  });
+})();
 </script>
 ```
+
+**Note:** Update `schedulerBase` URLs to match your staging and production domains.
 
 ## Admin Dashboard
 
