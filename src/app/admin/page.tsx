@@ -150,19 +150,19 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Visitors</div>
-          <div className="text-2xl font-bold text-slate-900">{data?.overview.visitors.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-slate-900">{data?.overview?.visitors?.toLocaleString() ?? '0'}</div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Form Opens</div>
-          <div className="text-2xl font-bold text-slate-900">{data?.overview.formOpens.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-slate-900">{data?.overview?.formOpens?.toLocaleString() ?? '0'}</div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Bookings</div>
-          <div className="text-2xl font-bold text-primary-600">{data?.overview.bookings.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-primary-600">{data?.overview?.bookings?.toLocaleString() ?? '0'}</div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Conv. Rate</div>
-          <div className="text-2xl font-bold text-slate-900">{data?.overview.conversionRate.toFixed(1)}%</div>
+          <div className="text-2xl font-bold text-slate-900">{data?.overview?.conversionRate?.toFixed(1) ?? '0.0'}%</div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">HubSpot Sync</div>

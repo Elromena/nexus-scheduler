@@ -387,15 +387,6 @@ export async function GET(request: NextRequest) {
         trafficSources: trafficSources,
       }
     });
-        // Dashboard extensions
-        recentActivity,
-        pipeline,
-        hotLeads,
-        // Legacy support for dashboard
-        recentVisitors: hotLeads, 
-        trafficSources: trafficSources,
-      }
-    });
 
   } catch (error) {
     console.error('Analytics fetch error:', error);
