@@ -26,6 +26,67 @@ interface LeadDetails {
   formEvents: Array<FormEvent>;
 }
 
+// Reusable pagination component
+function PaginationControls({
+  totalItems,
+  currentPage,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  totalItems: number;
+  currentPage: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const totalPages = Math.ceil(totalItems / pageSize);
+  
+  return (
+    <div className="flex items-center justify-between mb-3 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">Show:</span>
+        {[10, 20, 50].map((size) => (
+          <button
+            key={size}
+            onClick={() => onPageSizeChange(size)}
+            className={`px-2 py-1 rounded ${
+              pageSize === size
+                ? 'bg-primary-100 text-primary-700 font-medium'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            {size}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <span className="text-slate-600">
+          Page {currentPage} of {totalPages || 1}
+        </span>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
   const leadId = params?.id;
@@ -34,6 +95,46 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const booking = data?.booking || {};
   const visitor = data?.visitor || null;
+
+  // Collapsible state
+  const [pageViewsExpanded, setPageViewsExpanded] = useState(false);
+  const [formEventsExpanded, setFormEventsExpanded] = useState(false);
+
+  // Pagination state for page views
+  const [pvPage, setPvPage] = useState(1);
+  const [pvPageSize, setPvPageSize] = useState(10);
+
+  // Pagination state for form events
+  const [fePage, setFePage] = useState(1);
+  const [fePageSize, setFePageSize] = useState(10);
+
+  // Expanded metadata rows (for form events)
+  const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
+  const [showRawJson, setShowRawJson] = useState<Set<string>>(new Set());
+
+  const toggleEventExpanded = (id: string) => {
+    setExpandedEventIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleRawJson = (id: string) => {
+    setShowRawJson((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const formatDateTime = (value: unknown) => {
     if (!value || typeof value !== 'string') return '—';
@@ -72,6 +173,51 @@ export default function LeadDetailPage() {
       };
     });
   }, [data?.formEvents]);
+
+  // Sorted page views (most recent first)
+  const sortedPageViews = useMemo(() => {
+    if (!data?.pageViews) return [];
+    return [...data.pageViews].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [data?.pageViews]);
+
+  // Sorted form events (most recent first)
+  const sortedFormEvents = useMemo(() => {
+    return [...processedFormEvents].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [processedFormEvents]);
+
+  // Paginated page views
+  const paginatedPageViews = useMemo(() => {
+    const start = (pvPage - 1) * pvPageSize;
+    return sortedPageViews.slice(start, start + pvPageSize);
+  }, [sortedPageViews, pvPage, pvPageSize]);
+
+  // Paginated form events
+  const paginatedFormEvents = useMemo(() => {
+    const start = (fePage - 1) * fePageSize;
+    return sortedFormEvents.slice(start, start + fePageSize);
+  }, [sortedFormEvents, fePage, fePageSize]);
+
+  // Reset to page 1 when page size changes
+  const handlePvPageSizeChange = (size: number) => {
+    setPvPageSize(size);
+    setPvPage(1);
+  };
+
+  const handleFePageSizeChange = (size: number) => {
+    setFePageSize(size);
+    setFePage(1);
+  };
+
+  // Format metadata for display
+  const formatMetadataValue = (value: unknown): string => {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
 
   useEffect(() => {
     if (!leadId) return;
@@ -292,35 +438,176 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">Form Events</h2>
-        <div className="space-y-3">
-          {processedFormEvents.map((event) => (
-            <div key={event.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">
-                  {event.eventType} {event.step ? `(Step ${event.step})` : ''}
-                </div>
-                <div className="text-xs text-slate-500">{formatDateTime(event.timestamp)}</div>
-              </div>
-              <div className="text-xs text-slate-600 break-all">
-                {event.metadata ? JSON.stringify(event.metadata) : ''}
-              </div>
+      {/* Form Events - Collapsible */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <button
+          onClick={() => setFormEventsExpanded(!formEventsExpanded)}
+          className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-slate-900">
+            Form Events ({sortedFormEvents.length})
+          </h2>
+          <svg
+            className={`w-5 h-5 text-slate-500 transition-transform ${formEventsExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {formEventsExpanded && (
+          <div className="px-6 pb-6 border-t border-slate-100">
+            <div className="pt-4">
+              {sortedFormEvents.length > 0 ? (
+                <>
+                  <PaginationControls
+                    totalItems={sortedFormEvents.length}
+                    currentPage={fePage}
+                    pageSize={fePageSize}
+                    onPageChange={setFePage}
+                    onPageSizeChange={handleFePageSizeChange}
+                  />
+                  <div className="space-y-2">
+                    {paginatedFormEvents.map((event) => {
+                      const isExpanded = expandedEventIds.has(event.id);
+                      const showRaw = showRawJson.has(event.id);
+                      const metadataEntries = event.metadata ? Object.entries(event.metadata) : [];
+
+                      return (
+                        <div key={event.id} className="border border-slate-100 rounded-lg overflow-hidden">
+                          <div
+                            className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50"
+                            onClick={() => toggleEventExpanded(event.id)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">📝</span>
+                              <div>
+                                <div className="text-sm font-medium text-slate-900">
+                                  {event.eventType}
+                                  {event.step !== undefined && event.step !== null && (
+                                    <span className="ml-2 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                                      Step {event.step}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-500">{formatDateTime(event.timestamp)}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {metadataEntries.length > 0 && (
+                                <span className="text-xs text-slate-400">
+                                  {metadataEntries.length} field{metadataEntries.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              <svg
+                                className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+
+                          {isExpanded && metadataEntries.length > 0 && (
+                            <div className="border-t border-slate-100 bg-slate-50 p-3">
+                              {!showRaw ? (
+                                <div className="space-y-2">
+                                  {metadataEntries.map(([key, value]) => (
+                                    <div key={key} className="flex text-sm">
+                                      <span className="text-slate-500 w-32 flex-shrink-0">{key}:</span>
+                                      <span className="text-slate-900 break-all">{formatMetadataValue(value)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <pre className="text-xs bg-slate-900 text-green-400 p-3 rounded overflow-x-auto">
+                                  {JSON.stringify(event.metadata, null, 2)}
+                                </pre>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleRawJson(event.id);
+                                }}
+                                className="mt-2 text-xs text-primary-600 hover:text-primary-700"
+                              >
+                                {showRaw ? 'Show formatted' : 'View raw JSON'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="text-slate-500 text-sm">No form events recorded</p>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">Page Views</h2>
-        <div className="space-y-2">
-          {data.pageViews.map((view) => (
-            <div key={view.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3 text-sm">
-              <div className="font-medium text-slate-900 break-all">{view.pageUrl || '—'}</div>
-              <div className="text-xs text-slate-500">{formatDateTime(view.timestamp)}</div>
+      {/* Page Views - Collapsible */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <button
+          onClick={() => setPageViewsExpanded(!pageViewsExpanded)}
+          className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-slate-900">
+            Page Views ({sortedPageViews.length})
+          </h2>
+          <svg
+            className={`w-5 h-5 text-slate-500 transition-transform ${pageViewsExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {pageViewsExpanded && (
+          <div className="px-6 pb-6 border-t border-slate-100">
+            <div className="pt-4">
+              {sortedPageViews.length > 0 ? (
+                <>
+                  <PaginationControls
+                    totalItems={sortedPageViews.length}
+                    currentPage={pvPage}
+                    pageSize={pvPageSize}
+                    onPageChange={setPvPage}
+                    onPageSizeChange={handlePvPageSizeChange}
+                  />
+                  <div className="space-y-2">
+                    {paginatedPageViews.map((view) => (
+                      <div
+                        key={view.id}
+                        className="flex items-center justify-between p-3 border border-slate-100 rounded-lg text-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-lg flex-shrink-0">📄</span>
+                          <span className="font-medium text-slate-900 truncate">
+                            {view.pageUrl?.replace(/^https?:\/\/[^/]+/, '') || '—'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 flex-shrink-0 ml-4">
+                          {formatDateTime(view.timestamp)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-slate-500 text-sm">No page views recorded</p>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
