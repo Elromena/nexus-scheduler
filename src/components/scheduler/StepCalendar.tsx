@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import type { FormData } from '@/app/page';
-import { getMonthDates, getMonthName, isPastDate, isWeekend, formatDate } from '@/lib/utils/dates';
+import { getMonthDates, getMonthName, isPastDate, formatDate } from '@/lib/utils/dates';
+
+interface CalendarConfig {
+  availableDays: number[]; // 0=Sun, 1=Mon, etc.
+  businessHours: { start: string; end: string };
+  slotDuration: number;
+  bufferTime: number;
+  blockedDates: string[];
+}
 
 interface StepCalendarProps {
   formData: FormData;
@@ -32,6 +40,29 @@ export default function StepCalendar({
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calendarConfig, setCalendarConfig] = useState<CalendarConfig>({
+    availableDays: [1, 2, 3, 4, 5], // Default: Mon-Fri
+    businessHours: { start: '09:00', end: '17:00' },
+    slotDuration: 30,
+    bufferTime: 0,
+    blockedDates: [],
+  });
+
+  // Fetch calendar config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/scheduler/api/calendar-config');
+        const result = await response.json();
+        if (result.success && result.config) {
+          setCalendarConfig(result.config);
+        }
+      } catch (err) {
+        console.error('Failed to fetch calendar config:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   const monthDates = getMonthDates(viewDate.getFullYear(), viewDate.getMonth());
   const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -120,7 +151,18 @@ export default function StepCalendar({
   const isDateDisabled = (date: Date | null): boolean => {
     if (!date) return true;
     const dateStr = formatDate(date);
-    return isPastDate(dateStr) || isWeekend(dateStr);
+    
+    // Check if past date
+    if (isPastDate(dateStr)) return true;
+    
+    // Check if day of week is available
+    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, etc.
+    if (!calendarConfig.availableDays.includes(dayOfWeek)) return true;
+    
+    // Check if date is blocked
+    if (calendarConfig.blockedDates.includes(dateStr)) return true;
+    
+    return false;
   };
 
   return (

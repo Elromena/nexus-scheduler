@@ -38,23 +38,20 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(schema.bookings.createdAt))
       .limit(10);
 
-    // Check test mode - DB setting takes precedence over env var
+    // Check test mode - ONLY from database setting
     const testModeSetting = await db
       .select()
       .from(schema.settings)
       .where(sql`${schema.settings.key} = 'test_mode'`)
       .get();
 
-    // If DB setting exists, use it; otherwise fall back to env var
-    const isTestMode = testModeSetting 
-      ? testModeSetting.value === 'true'
-      : env.TEST_MODE === 'true';
+    // Use DB setting only (defaults to false if not set)
+    const isTestMode = testModeSetting?.value === 'true';
 
     // Summarize integration status
     const summary = {
       testMode: isTestMode,
-      testModeSource: testModeSetting ? 'database' : 'environment',
-      envTestMode: env.TEST_MODE === 'true',
+      testModeSource: 'database',
       dbTestMode: testModeSetting?.value === 'true',
       dbTestModeExists: !!testModeSetting,
       hubspotConfigured: !!env.HUBSPOT_ACCESS_TOKEN,

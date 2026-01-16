@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
+import * as schema from '@/lib/db/schema';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,10 +19,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const db = drizzle(env.DB, { schema });
+
+    // Check test mode from database
+    const testModeSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'test_mode'))
+      .get();
+
     return NextResponse.json({
       success: true,
       data: {
-        testMode: env.TEST_MODE === 'true',
+        testMode: testModeSetting?.value === 'true',
         hubspotConfigured: Boolean(env.HUBSPOT_ACCESS_TOKEN),
         googleServiceAccountConfigured: Boolean(env.GOOGLE_SERVICE_ACCOUNT),
         googleCalendarEmailConfigured: Boolean(env.GOOGLE_CALENDAR_EMAIL),

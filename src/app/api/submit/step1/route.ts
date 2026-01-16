@@ -24,22 +24,19 @@ export async function POST(request: NextRequest) {
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
 
-    // Check if test mode - DB setting takes precedence over env var
+    // Check if test mode - ONLY from database setting
     const testModeSetting = await db
       .select()
       .from(schema.settings)
       .where(eq(schema.settings.key, 'test_mode'))
       .get();
 
-    // If DB setting exists, use it; otherwise fall back to env var
-    const isTestMode = testModeSetting 
-      ? testModeSetting.value === 'true'
-      : env.TEST_MODE === 'true';
+    // Use DB setting only (defaults to false if not set)
+    const isTestMode = testModeSetting?.value === 'true';
     
     if (env.DEBUG_LOGGING === 'true') {
       console.log('Test mode check:', {
         dbSetting: testModeSetting?.value,
-        envVar: env.TEST_MODE,
         effectiveTestMode: isTestMode,
       });
     }

@@ -38,16 +38,26 @@ export function getUserTimezone(): string {
 }
 
 export function isWeekend(date: Date | string): boolean {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  // Parse date string properly to avoid timezone issues
+  // "2026-01-19" should be interpreted as local date, not UTC
+  let d: Date;
+  if (typeof date === 'string') {
+    // Parse YYYY-MM-DD as local date by splitting and using year, month, day
+    const [year, month, day] = date.split('-').map(Number);
+    d = new Date(year, month - 1, day); // month is 0-indexed
+  } else {
+    d = date;
+  }
   const day = d.getDay();
-  return day === 0 || day === 6;
+  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
 }
 
 export function isPastDate(date: string): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const checkDate = new Date(date);
-  checkDate.setHours(0, 0, 0, 0);
+  // Parse YYYY-MM-DD as local date to avoid timezone issues
+  const [year, month, day] = date.split('-').map(Number);
+  const checkDate = new Date(year, month - 1, day);
   return checkDate < today;
 }
 

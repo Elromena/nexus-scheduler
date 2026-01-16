@@ -199,6 +199,25 @@ function DebugSection() {
   );
 }
 
+// Calendar config interface
+interface CalendarConfig {
+  availableDays: number[];
+  businessHours: { start: string; end: string };
+  slotDuration: number;
+  bufferTime: number;
+  blockedDates: string[];
+}
+
+const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
+  availableDays: [1, 2, 3, 4, 5], // Mon-Fri
+  businessHours: { start: '09:00', end: '17:00' },
+  slotDuration: 30,
+  bufferTime: 0,
+  blockedDates: [],
+};
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 export default function SettingsPage() {
   // Integration status
   const [checking, setChecking] = useState(false);
@@ -215,6 +234,8 @@ export default function SettingsPage() {
   const [testMode, setTestMode] = useState(false);
   const [calendarSlots, setCalendarSlots] = useState<string[]>([]);
   const [newSlot, setNewSlot] = useState('');
+  const [calendarConfig, setCalendarConfig] = useState<CalendarConfig>(DEFAULT_CALENDAR_CONFIG);
+  const [newBlockedDate, setNewBlockedDate] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -255,6 +276,14 @@ export default function SettingsPage() {
       } catch {
         setCalendarSlots([]);
       }
+
+      // Parse calendar config
+      try {
+        const config = JSON.parse(data.calendar_config || '{}');
+        setCalendarConfig({ ...DEFAULT_CALENDAR_CONFIG, ...config });
+      } catch {
+        setCalendarConfig(DEFAULT_CALENDAR_CONFIG);
+      }
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
@@ -276,6 +305,7 @@ export default function SettingsPage() {
         body: JSON.stringify({
           test_mode: testMode ? 'true' : 'false',
           calendar_slots: JSON.stringify(calendarSlots),
+          calendar_config: JSON.stringify(calendarConfig),
         }),
       });
 
@@ -299,6 +329,32 @@ export default function SettingsPage() {
 
   const removeSlot = (slot: string) => {
     setCalendarSlots(calendarSlots.filter(s => s !== slot));
+  };
+
+  const toggleDay = (day: number) => {
+    setCalendarConfig(prev => ({
+      ...prev,
+      availableDays: prev.availableDays.includes(day)
+        ? prev.availableDays.filter(d => d !== day)
+        : [...prev.availableDays, day].sort()
+    }));
+  };
+
+  const addBlockedDate = () => {
+    if (newBlockedDate && !calendarConfig.blockedDates.includes(newBlockedDate)) {
+      setCalendarConfig(prev => ({
+        ...prev,
+        blockedDates: [...prev.blockedDates, newBlockedDate].sort()
+      }));
+      setNewBlockedDate('');
+    }
+  };
+
+  const removeBlockedDate = (date: string) => {
+    setCalendarConfig(prev => ({
+      ...prev,
+      blockedDates: prev.blockedDates.filter(d => d !== date)
+    }));
   };
 
   const handleVerify = async () => {
@@ -421,16 +477,151 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            {/* Calendar Slots */}
+            {/* Calendar Availability Settings */}
             <div className="p-4 bg-slate-50 rounded-lg">
-              <div className="font-semibold text-slate-900 mb-2">Available Time Slots</div>
+              <div className="font-semibold text-slate-900 mb-2">Calendar Availability</div>
               <p className="text-sm text-slate-600 mb-4">
-                Configure which time slots are available for booking (24-hour format, e.g., 09:00, 14:30)
+                Configure which days and hours are available for booking
+              </p>
+              
+              {/* Available Days */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Available Days</label>
+                <div className="flex flex-wrap gap-2">
+                  {DAY_NAMES.map((name, index) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => toggleDay(index)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        calendarConfig.availableDays.includes(index)
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {name.slice(0, 3)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Selected: {calendarConfig.availableDays.length === 0 
+                    ? 'None' 
+                    : calendarConfig.availableDays.map(d => DAY_NAMES[d].slice(0, 3)).join(', ')}
+                </p>
+              </div>
+
+              {/* Business Hours */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    value={calendarConfig.businessHours.start}
+                    onChange={(e) => setCalendarConfig(prev => ({
+                      ...prev,
+                      businessHours: { ...prev.businessHours, start: e.target.value }
+                    }))}
+                    className="form-input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
+                  <input
+                    type="time"
+                    value={calendarConfig.businessHours.end}
+                    onChange={(e) => setCalendarConfig(prev => ({
+                      ...prev,
+                      businessHours: { ...prev.businessHours, end: e.target.value }
+                    }))}
+                    className="form-input w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Slot Duration & Buffer */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Slot Duration (minutes)</label>
+                  <select
+                    value={calendarConfig.slotDuration}
+                    onChange={(e) => setCalendarConfig(prev => ({
+                      ...prev,
+                      slotDuration: parseInt(e.target.value)
+                    }))}
+                    className="form-input w-full"
+                  >
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Buffer Between Slots</label>
+                  <select
+                    value={calendarConfig.bufferTime}
+                    onChange={(e) => setCalendarConfig(prev => ({
+                      ...prev,
+                      bufferTime: parseInt(e.target.value)
+                    }))}
+                    className="form-input w-full"
+                  >
+                    <option value="0">No buffer</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Blocked Dates */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Blocked Dates (Holidays, etc.)</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {calendarConfig.blockedDates.length === 0 ? (
+                    <span className="text-sm text-slate-500">No blocked dates</span>
+                  ) : (
+                    calendarConfig.blockedDates.map((date) => (
+                      <span 
+                        key={date} 
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-red-50 border border-red-200 rounded-full text-sm text-red-700"
+                      >
+                        {date}
+                        <button 
+                          onClick={() => removeBlockedDate(date)}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={newBlockedDate}
+                    onChange={(e) => setNewBlockedDate(e.target.value)}
+                    className="form-input w-auto"
+                  />
+                  <button onClick={addBlockedDate} className="btn-outline">
+                    Block Date
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Time Slots (Optional Override) */}
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold text-slate-900 mb-2">Custom Time Slots (Optional)</div>
+              <p className="text-sm text-slate-600 mb-4">
+                Override auto-generated slots with specific times. Leave empty to use business hours above.
               </p>
               
               <div className="flex flex-wrap gap-2 mb-4">
                 {calendarSlots.length === 0 ? (
-                  <span className="text-sm text-slate-500">No slots configured</span>
+                  <span className="text-sm text-slate-500">Using business hours (no custom slots)</span>
                 ) : (
                   calendarSlots.map((slot) => (
                     <span 
