@@ -14,9 +14,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email } = body;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'manage/send-code/route.ts:17',message:'Send code request entry',data:{email},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
+    console.log(`MANAGE: Send code request for email: ${email}`);
 
     if (debug) {
       console.log('Send code request:', { email: email?.substring(0, 3) + '***' });

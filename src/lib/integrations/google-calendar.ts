@@ -203,27 +203,38 @@ export class GoogleCalendarClient {
     try {
       const events = await this.listEvents(date);
       
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'google-calendar.ts:207',message:'Google Calendar raw events',data:{date,eventCount:events.length,events:events.map(e=>({summary:e.summary,start:e.start,end:e.end}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
-      // #endregion
+      console.log(`Google Calendar Events for ${date}:`, JSON.stringify(events.map(e => ({
+        summary: e.summary,
+        start: e.start.dateTime,
+        end: e.end.dateTime
+      }))));
 
       // Extract busy times from events
       const busyTimes = new Set<string>();
       for (const event of events) {
-        if (event.start?.dateTime) {
-          // Extract HH:MM from ISO datetime
-          const time = event.start.dateTime.split('T')[1]?.substring(0, 5);
-          if (time) busyTimes.add(time);
+        if (event.start?.dateTime && event.end?.dateTime) {
+          const startTime = new Date(event.start.dateTime);
+          const endTime = new Date(event.end.dateTime);
+          
+          console.log(`Busy event: ${event.summary} (${startTime.toISOString()} - ${endTime.toISOString()})`);
+
+          // Block all slots that fall within this event's duration
+          for (const slot of allSlots) {
+            const [hour, min] = slot.split(':').map(Number);
+            const slotDate = new Date(startTime);
+            slotDate.setHours(hour, min, 0, 0);
+            
+            if (slotDate >= startTime && slotDate < endTime) {
+              busyTimes.add(slot);
+              console.log(`Blocking slot: ${slot} because of event ${event.summary}`);
+            }
+          }
         }
       }
 
       // Filter out busy slots
       const available = allSlots.filter(slot => !busyTimes.has(slot));
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'google-calendar.ts:220',message:'Availability results',data:{busyTimes:Array.from(busyTimes),availableCount:available.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
-
+      console.log(`Final available slots: ${available.length}/${allSlots.length}`);
       return available;
     } catch (error) {
       console.error('Error getting availability:', error);
