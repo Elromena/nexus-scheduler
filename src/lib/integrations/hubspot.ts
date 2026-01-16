@@ -31,6 +31,8 @@ export interface HubSpotMeetingProperties {
   hs_meeting_start_time: string;
   hs_meeting_end_time: string;
   hs_meeting_outcome?: string;
+  hs_meeting_external_url?: string; // Google Meet link
+  hs_meeting_location?: string;
 }
 
 interface HubSpotResponse {
@@ -199,10 +201,13 @@ export class HubSpotClient {
   async processBooking(
     contactId: string,
     contactData: {
+      firstName: string;
+      lastName: string;
       website: string;
       objective: string;
       budget: string;
       roleType: string;
+      industry?: string;
     },
     meetingData: {
       startTime: string;
@@ -227,14 +232,28 @@ export class HubSpotClient {
       closedate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     });
 
-    // Create meeting
+    // Build meeting description
+    const meetingBody = `Blockchain-Ads Account Verification Call
+
+Lead Details:
+• Name: ${contactData.firstName} ${contactData.lastName}
+• Website: ${contactData.website}
+• Industry: ${contactData.industry || 'N/A'}
+• Budget: ${contactData.budget}
+• Objective: ${contactData.objective}
+
+${meetingData.meetLink ? `Join Meeting: ${meetingData.meetLink}` : ''}`;
+
+    // Create meeting with Google Meet link
     const meetingId = await this.createMeeting(contactId, {
       hs_timestamp: new Date().toISOString(),
-      hs_meeting_title: 'Nexus Verification Call',
-      hs_meeting_body: `Scheduled via Web.\nMeet Link: ${meetingData.meetLink || 'TBD'}`,
+      hs_meeting_title: 'Blockchain-Ads Account Verification',
+      hs_meeting_body: meetingBody,
       hs_meeting_start_time: meetingData.startTime,
       hs_meeting_end_time: meetingData.endTime,
-      hs_meeting_outcome: 'SCHEDULED'
+      hs_meeting_outcome: 'SCHEDULED',
+      hs_meeting_external_url: meetingData.meetLink || undefined,
+      hs_meeting_location: meetingData.meetLink ? 'Google Meet' : undefined,
     });
 
     return { dealId, meetingId };

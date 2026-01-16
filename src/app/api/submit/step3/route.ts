@@ -179,13 +179,16 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
           const startTime = toISODateTime(validData.date, validData.time);
           const endTime = toISODateTime(validData.date, validData.time, 30);
 
-          await hubspot.processBooking(
+          const result = await hubspot.processBooking(
             hubspotId,
             {
+              firstName: validData.firstName,
+              lastName: validData.lastName,
               website: validData.website,
               objective: validData.objective,
               budget: validData.budget,
               roleType: validData.roleType,
+              industry: validData.industry,
             },
             {
               startTime,
@@ -193,6 +196,17 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
               meetLink: googleMeetLink,
             }
           );
+          
+          // Store HubSpot deal and meeting IDs
+          if (result.dealId || result.meetingId) {
+            await db
+              .update(schema.bookings)
+              .set({ 
+                hubspotDealId: result.dealId || undefined,
+                hubspotMeetingId: result.meetingId || undefined,
+              })
+              .where(eq(schema.bookings.id, bookingId));
+          }
         } catch (error) {
           console.error('HubSpot error:', error);
           // Continue without HubSpot - don't fail the booking
