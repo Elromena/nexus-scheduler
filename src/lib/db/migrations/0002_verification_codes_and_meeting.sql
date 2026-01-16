@@ -16,8 +16,3 @@ CREATE TABLE IF NOT EXISTS verification_codes (
 
 CREATE INDEX IF NOT EXISTS idx_verification_codes_email ON verification_codes(email);
 CREATE INDEX IF NOT EXISTS idx_verification_codes_code ON verification_codes(code);
-
--- =============================================
--- ADD HUBSPOT MEETING ID TO BOOKINGS
--- =============================================
-ALTER TABLE bookings ADD COLUMN hubspot_meeting_id TEXT;
