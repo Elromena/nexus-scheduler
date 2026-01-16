@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, gte, and } from 'drizzle-orm';
+import { eq, gte, and, or } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import * as schema from '@/lib/db/schema';
 import { sendEmail, generateVerificationEmailHTML, generateCode } from '@/lib/integrations/resend';
@@ -43,7 +43,10 @@ export async function POST(request: NextRequest) {
       .where(and(
         eq(schema.bookings.email, email.toLowerCase()),
         gte(schema.bookings.scheduledDate, todayDate),
-        eq(schema.bookings.status, 'pending')
+        or(
+          eq(schema.bookings.status, 'pending'),
+          eq(schema.bookings.status, 'confirmed')
+        )
       ));
 
     if (debug) {

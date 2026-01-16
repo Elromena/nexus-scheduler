@@ -10,6 +10,7 @@ interface CalendarConfig {
   slotDuration: number;
   bufferTime: number;
   blockedDates: string[];
+  hostTimezone: string;
 }
 
 interface StepCalendarProps {
@@ -46,6 +47,7 @@ export default function StepCalendar({
     slotDuration: 30,
     bufferTime: 0,
     blockedDates: [],
+    hostTimezone: 'UTC',
   });
 
   // Fetch calendar config on mount
@@ -55,7 +57,8 @@ export default function StepCalendar({
         const response = await fetch('/scheduler/api/calendar-config');
         const result = await response.json();
         if (result.success && result.config) {
-          setCalendarConfig(result.config);
+          const config = { ...result.config, hostTimezone: result.hostTimezone || 'UTC' };
+          setCalendarConfig(config);
         }
       } catch (err) {
         console.error('Failed to fetch calendar config:', err);
@@ -110,6 +113,60 @@ export default function StepCalendar({
 
   const handleTimeSelect = (time: string) => {
     updateFormData({ time });
+  };
+
+  const formatSlotForDisplay = (slot: string) => {
+    if (!selectedDate) return slot;
+    try {
+      // Create a Date object assuming the slot is in the HOST'S timezone
+      // We'll use the Date constructor with the timezone offset trick
+      const [hour, min] = slot.split(':').map(Number);
+      
+      // Construct date string that includes the host's timezone offset
+      // This is the most reliable way in standard JS
+      const hostTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: calendarConfig.hostTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(new Date()); // Get current offset basically
+      
+      // Actually, standard JS toLocaleTimeString is enough if we just want to show the user's local time
+      // But we need to KNOW what the universal time of that slot is.
+      
+      // Let's use a robust approach: 
+      // 1. Construct a date string in the format YYYY-MM-DDTHH:MM:SS
+      // 2. Append the host's current offset
+      
+      // Get host offset for the target date
+      const dummyDate = new Date(`${selectedDate}T${slot}:00`);
+      const hostOffsetStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: calendarConfig.hostTimezone,
+        timeZoneName: 'shortOffset'
+      }).format(dummyDate).split('GMT')[1] || '+00:00';
+      
+      // Convert "+1" to "+01:00"
+      const formattedOffset = hostOffsetStr.includes(':') 
+        ? hostOffsetStr 
+        : hostOffsetStr.startsWith('+') || hostOffsetStr.startsWith('-')
+          ? hostOffsetStr.charAt(0) + hostOffsetStr.substring(1).padStart(2, '0') + ':00'
+          : '+00:00';
+
+      const isoWithOffset = `${selectedDate}T${slot}:00${formattedOffset}`;
+      const localDate = new Date(isoWithOffset);
+
+      return localDate.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return slot;
+    }
   };
 
   const handleConfirmBooking = async () => {
@@ -269,7 +326,7 @@ export default function StepCalendar({
                     onClick={() => handleTimeSelect(time)}
                     className={`time-slot ${formData.time === time ? 'selected' : ''}`}
                   >
-                    {time}
+                    {formatSlotForDisplay(time)}
                   </button>
                 ))}
               </div>

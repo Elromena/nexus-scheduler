@@ -153,7 +153,8 @@ export async function POST(request: NextRequest) {
 
     // Get availability from Google Calendar
     const calendar = getGoogleCalendarClient(googleCreds, calendarEmail);
-    const availableSlots = await calendar.getAvailability(date, allSlots);
+    const hostTimezone = calendarConfigSetting?.value ? JSON.parse(calendarConfigSetting.value).hostTimezone || 'UTC' : 'UTC';
+    const availableSlots = await calendar.getAvailability(date, allSlots, hostTimezone);
 
     return NextResponse.json({
       success: true,
