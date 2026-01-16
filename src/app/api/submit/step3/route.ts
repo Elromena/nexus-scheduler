@@ -126,9 +126,28 @@ export async function POST(request: NextRequest) {
             return `${validData.date}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
           })();
 
+          // Build calendar event description
+          const eventDescription = `Start With Blockchain-Ads Account Strategist
+
+Direct personalized onboarding and assistance for account verification
+
+Note: Access is limited, missed meetings move to the next available window (typically ~30 days).
+
+Need to make changes?
+Contact: team@blockchain-ads.com
+
+─────────────────────────
+
+• Name: ${validData.firstName} ${validData.lastName}
+• Email: ${validData.email}
+• Website: ${validData.website}
+• Industry: ${validData.industry}
+• Budget: ${validData.budget}
+• Objective: ${validData.objective}`;
+
           const event = await calendar.createEvent({
-            summary: `Nexus Verification: ${validData.firstName} ${validData.lastName}`,
-            description: `Client: ${validData.email}\nWebsite: ${validData.website}\nGoal: ${validData.objective}\nBudget: ${validData.budget}`,
+            summary: `Blockchain-Ads Account Verification`,
+            description: eventDescription,
             startTime,
             endTime,
             attendeeEmail: validData.email,

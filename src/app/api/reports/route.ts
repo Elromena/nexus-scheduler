@@ -67,19 +67,19 @@ export async function GET(request: NextRequest) {
     let endDate: string;
     
     if (startMonth && endMonth) {
-      // Custom range
-      startDate = `${startMonth}-01`;
+      // Custom range - start at beginning of first day, end at end of last day
+      startDate = `${startMonth}-01T00:00:00.000Z`;
       const endParts = endMonth.split('-');
       const endYear = parseInt(endParts[0]);
       const endMonthNum = parseInt(endParts[1]);
       const lastDay = new Date(endYear, endMonthNum, 0).getDate();
-      endDate = `${endMonth}-${lastDay}`;
+      endDate = `${endMonth}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
     } else {
-      // Last N months
+      // Last N months - include full days
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
-      startDate = start.toISOString().split('T')[0];
-      endDate = now.toISOString().split('T')[0];
+      startDate = start.toISOString().split('T')[0] + 'T00:00:00.000Z';
+      endDate = now.toISOString().split('T')[0] + 'T23:59:59.999Z';
     }
 
     // Build response based on report type
