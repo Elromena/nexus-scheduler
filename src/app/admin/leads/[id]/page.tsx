@@ -18,21 +18,45 @@ interface PageView {
   timestamp: string;
 }
 
+interface Session {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  duration: number | null;
+  pageCount: number;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+}
+
 interface LeadDetails {
   booking: Record<string, unknown>;
-  visitor: Record<string, unknown> | null;
-  sessions: Array<Record<string, unknown>>;
+  visitor: {
+    id: string;
+    totalVisits: number;
+    deviceType: string | null;
+    browser: string | null;
+    os: string | null;
+    country: string | null;
+    city: string | null;
+    timezone: string | null;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    totalTimeOnSite: number;
+  } | null;
+  sessions: Array<Session>;
   pageViews: Array<PageView>;
   formEvents: Array<FormEvent>;
 }
 
 interface TimelineItem {
   id: string;
-  type: 'page_view' | 'form_event';
+  type: 'page_view' | 'form_event' | 'session_header';
   timestamp: string;
   label: string;
   step?: number;
   metadata?: Record<string, unknown> | null;
+  sessionData?: Session;
 }
 
 // Reusable pagination component
@@ -161,7 +185,7 @@ export default function LeadDetailPage() {
     return parts.join(' ');
   };
 
-  // Merge Page Views and Form Events into a single Timeline
+  // Merge Page Views, Form Events, and Sessions into a single Timeline
   const timeline = useMemo(() => {
     if (!data) return [];
 
@@ -194,7 +218,15 @@ export default function LeadDetailPage() {
       };
     });
 
-    return [...pageViews, ...formEvents].sort(
+    const sessionHeaders: TimelineItem[] = (data.sessions || []).map((s, idx) => ({
+      id: s.id,
+      type: 'session_header',
+      timestamp: s.startedAt,
+      label: `Session #${data.sessions.length - idx}`,
+      sessionData: s,
+    }));
+
+    return [...pageViews, ...formEvents, ...sessionHeaders].sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
   }, [data]);
@@ -396,7 +428,11 @@ export default function LeadDetailPage() {
 
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Visitor Info</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+          <div>
+            <div className="text-slate-500">Total Visits</div>
+            <div className="font-bold text-primary-600 text-lg">{visitor?.totalVisits || 1}</div>
+          </div>
           <div>
             <div className="text-slate-500">Device</div>
             <div className="font-medium text-slate-900">{String(visitor?.deviceType || '—')}</div>
@@ -440,9 +476,14 @@ export default function LeadDetailPage() {
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">User Activity Timeline</h2>
-          <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
-            {timeline.length} Total Events
-          </span>
+          <div className="flex gap-2">
+            <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
+              {data.sessions.length} Visits
+            </span>
+            <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
+              {timeline.filter(t => t.type !== 'session_header').length} Events
+            </span>
+          </div>
         </div>
 
         <div className="p-6">
@@ -460,17 +501,42 @@ export default function LeadDetailPage() {
                 {/* Vertical line connecting icons */}
                 <div className="absolute left-[1.35rem] top-2 bottom-4 w-0.5 bg-slate-100"></div>
 
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {paginatedTimeline.map((item) => {
+                    if (item.type === 'session_header') {
+                      return (
+                        <div key={item.id} className="relative py-2 first:pt-0">
+                          <div className="flex items-center gap-4">
+                            <div className="w-11 h-11 rounded-full bg-slate-900 flex items-center justify-center z-10 shadow-md">
+                              <span className="text-lg" title="New Session">🚀</span>
+                            </div>
+                            <div className="flex-1 border-b border-slate-200 pb-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-900">{item.label} Started</span>
+                                <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                  {formatDateTime(item.timestamp)}
+                                </span>
+                              </div>
+                              {item.sessionData?.utmSource && (
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  Source: {item.sessionData.utmSource} | Medium: {item.sessionData.utmMedium || 'none'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const isExpanded = expandedEventIds.has(item.id);
                     const showRaw = showRawJson.has(item.id);
                     const metadataEntries = item.metadata ? Object.entries(item.metadata) : [];
                     const isFormEvent = item.type === 'form_event';
 
                     return (
-                      <div key={item.id} className="relative pl-12">
+                      <div key={item.id} className="relative pl-12 group">
                         {/* Icon Container */}
-                        <div className="absolute left-0 top-0 w-11 h-11 rounded-full bg-white border-2 border-slate-50 flex items-center justify-center z-10 shadow-sm">
+                        <div className="absolute left-0 top-0 w-11 h-11 rounded-full bg-white border-2 border-slate-50 flex items-center justify-center z-10 shadow-sm group-hover:border-primary-100 transition-colors">
                           {item.type === 'page_view' ? (
                             <span className="text-lg" title="Page View">📄</span>
                           ) : (
@@ -478,33 +544,33 @@ export default function LeadDetailPage() {
                           )}
                         </div>
 
-                        <div className={`rounded-lg border transition-all ${isExpanded ? 'border-primary-200 bg-primary-50/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
+                        <div className={`rounded-lg border transition-all ${isExpanded ? 'border-primary-200 bg-primary-50/10' : 'border-slate-100 hover:border-slate-200 bg-white shadow-sm hover:shadow'}`}>
                           <div
                             className={`p-3 ${isFormEvent ? 'cursor-pointer' : ''}`}
                             onClick={() => isFormEvent && toggleEventExpanded(item.id)}
                           >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div>
-                                <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                                  {item.label}
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
+                                  <span className="truncate">{item.label}</span>
                                   {item.step !== undefined && item.step !== null && (
-                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded flex-shrink-0">
                                       Step {item.step}
                                     </span>
                                   )}
                                   {item.type === 'form_event' && (
-                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded flex-shrink-0">
                                       Form
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-xs text-slate-500 mt-0.5">
+                                <div className="text-[11px] text-slate-400 mt-0.5">
                                   {formatDateTime(item.timestamp)}
                                 </div>
                               </div>
 
                               {isFormEvent && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-shrink-0">
                                   {metadataEntries.length > 0 && (
                                     <span className="text-[11px] text-slate-400 font-medium">
                                       {metadataEntries.length} field{metadataEntries.length !== 1 ? 's' : ''}
@@ -526,7 +592,7 @@ export default function LeadDetailPage() {
                           {isExpanded && isFormEvent && metadataEntries.length > 0 && (
                             <div className="border-t border-slate-100 bg-white p-4 animate-in fade-in slide-in-from-top-1 duration-200">
                               {!showRaw ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                                   {metadataEntries.map(([key, value]) => (
                                     <div key={key} className="flex flex-col py-1 border-b border-slate-50 last:border-0">
                                       <span className="text-[10px] uppercase font-bold text-slate-400 tracking-tight">{key}</span>
