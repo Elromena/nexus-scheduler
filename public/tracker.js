@@ -188,6 +188,44 @@
     }
     return landing;
   }
+
+  function getReferrer() {
+    // Get the original referrer (first touch)
+    let firstReferrer = getItem('first_referrer');
+    const currentReferrer = document.referrer || '';
+    
+    // Store first external referrer if not already stored
+    if (!firstReferrer && currentReferrer) {
+      // Check if referrer is external (different domain)
+      try {
+        const referrerHost = new URL(currentReferrer).hostname;
+        const currentHost = window.location.hostname;
+        
+        // Only store if it's from a different domain
+        if (referrerHost !== currentHost && !referrerHost.includes(currentHost) && !currentHost.includes(referrerHost)) {
+          firstReferrer = currentReferrer;
+          setItem('first_referrer', firstReferrer);
+        }
+      } catch (e) {
+        // If URL parsing fails, store it anyway
+        firstReferrer = currentReferrer;
+        setItem('first_referrer', firstReferrer);
+      }
+    }
+    
+    return {
+      current: currentReferrer,
+      first: firstReferrer || currentReferrer || null
+    };
+  }
+
+  function getClientTimezone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (e) {
+      return null;
+    }
+  }
   
   // =============================================
   // DEVICE DETECTION
@@ -238,6 +276,7 @@
     const device = getDeviceInfo();
     const utm = getUTMParams();
     const firstUtm = getFirstTouchUTM();
+    const referrerData = getReferrer();
     
     const payload = {
       event: event,
@@ -250,8 +289,10 @@
         url: window.location.href,
         path: window.location.pathname,
         title: document.title,
-        referrer: document.referrer || '',
+        referrer: referrerData.first || referrerData.current || '',
+        currentReferrer: referrerData.current || '',
         landingPage: getLandingPage(),
+        clientTimezone: getClientTimezone(),
         utm: utm,
         firstTouchUtm: firstUtm,
         device: device

@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import * as schema from '@/lib/db/schema';
-import { getGeoFromHeaders, anonymizeIP, getCountryName } from '@/lib/utils/geo';
+import { getGeoFromHeaders, anonymizeIP, getCountryName, inferCountryFromTimezone } from '@/lib/utils/geo';
 import { validateTrackingEvent } from '@/lib/utils/validation';
 
 export async function POST(request: NextRequest) {
@@ -41,12 +41,33 @@ export async function POST(request: NextRequest) {
     const geo = getGeoFromHeaders(request.headers, debugMode);
     const now = new Date().toISOString();
     
+    // Use client timezone as additional fallback for country detection
+    const clientTimezone = event.data?.clientTimezone;
+    if (clientTimezone && geo.countryCode === 'US') {
+      // If server says US but client timezone suggests otherwise, use client timezone
+      const inferredCountry = inferCountryFromTimezone(clientTimezone);
+      if (inferredCountry && inferredCountry !== 'US') {
+        if (debugMode) {
+          console.log(`Country override: Server said US, client timezone "${clientTimezone}" suggests "${inferredCountry}"`);
+        }
+        geo.countryCode = inferredCountry;
+        geo.country = inferredCountry;
+      }
+    }
+    
+    // Also use client timezone if server has no timezone
+    if (clientTimezone && !geo.timezone) {
+      geo.timezone = clientTimezone;
+    }
+    
     if (debugMode) {
       console.log('Geo detection:', {
         countryCode: geo.countryCode,
         country: getCountryName(geo.countryCode),
         city: geo.city,
         region: geo.region,
+        timezone: geo.timezone,
+        clientTimezone,
       });
     }
 
