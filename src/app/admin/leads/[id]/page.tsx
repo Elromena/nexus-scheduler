@@ -26,6 +26,15 @@ interface LeadDetails {
   formEvents: Array<FormEvent>;
 }
 
+interface TimelineItem {
+  id: string;
+  type: 'page_view' | 'form_event';
+  timestamp: string;
+  label: string;
+  step?: number;
+  metadata?: Record<string, unknown> | null;
+}
+
 // Reusable pagination component
 function PaginationControls({
   totalItems,
@@ -46,7 +55,7 @@ function PaginationControls({
     <div className="flex items-center justify-between mb-3 text-sm">
       <div className="flex items-center gap-2">
         <span className="text-slate-500">Show:</span>
-        {[10, 20, 50].map((size) => (
+        {[10, 20, 50, 100].map((size) => (
           <button
             key={size}
             onClick={() => onPageSizeChange(size)}
@@ -96,19 +105,11 @@ export default function LeadDetailPage() {
   const booking = data?.booking || {};
   const visitor = data?.visitor || null;
 
-  // Collapsible state
-  const [pageViewsExpanded, setPageViewsExpanded] = useState(false);
-  const [formEventsExpanded, setFormEventsExpanded] = useState(false);
+  // Pagination state for timeline
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
-  // Pagination state for page views
-  const [pvPage, setPvPage] = useState(1);
-  const [pvPageSize, setPvPageSize] = useState(10);
-
-  // Pagination state for form events
-  const [fePage, setFePage] = useState(1);
-  const [fePageSize, setFePageSize] = useState(10);
-
-  // Expanded metadata rows (for form events)
+  // Expanded metadata rows
   const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
   const [showRawJson, setShowRawJson] = useState<Set<string>>(new Set());
 
@@ -144,72 +145,69 @@ export default function LeadDetailPage() {
   };
 
   const formatSeconds = (value: unknown) => {
-    if (typeof value !== 'number') return '—';
-    const minutes = Math.floor(value / 60);
+    if (typeof value !== 'number' || value <= 0) return '—';
+    
+    const days = Math.floor(value / 86400);
+    const hours = Math.floor((value % 86400) / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
     const seconds = value % 60;
-    return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+    
+    return parts.join(' ');
   };
 
-  const processedFormEvents = useMemo(() => {
-    if (!data?.formEvents) return [];
-    return data.formEvents.map((event) => {
-      const metadataRaw = event.metadata;
-      let parsedMetadata: Record<string, unknown> | null = null;
-      if (typeof metadataRaw === 'string') {
+  // Merge Page Views and Form Events into a single Timeline
+  const timeline = useMemo(() => {
+    if (!data) return [];
+
+    const pageViews: TimelineItem[] = (data.pageViews || []).map(pv => ({
+      id: pv.id,
+      type: 'page_view',
+      timestamp: pv.timestamp,
+      label: pv.pageUrl.replace(/^https?:\/\/[^/]+/, '') || '/',
+    }));
+
+    const formEvents: TimelineItem[] = (data.formEvents || []).map(fe => {
+      let metadata: Record<string, unknown> | null = null;
+      if (typeof fe.metadata === 'string') {
         try {
-          parsedMetadata = JSON.parse(metadataRaw);
+          metadata = JSON.parse(fe.metadata);
         } catch {
-          parsedMetadata = null;
+          metadata = null;
         }
-      } else if (typeof metadataRaw === 'object') {
-        parsedMetadata = metadataRaw as Record<string, unknown> | null;
+      } else {
+        metadata = fe.metadata as Record<string, unknown> | null;
       }
+
       return {
-        id: event.id,
-        eventType: event.eventType,
-        step: event.step,
-        timestamp: event.timestamp,
-        metadata: parsedMetadata,
+        id: fe.id,
+        type: 'form_event',
+        timestamp: fe.timestamp,
+        label: fe.eventType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        step: fe.step,
+        metadata: metadata,
       };
     });
-  }, [data?.formEvents]);
 
-  // Sorted page views (most recent first)
-  const sortedPageViews = useMemo(() => {
-    if (!data?.pageViews) return [];
-    return [...data.pageViews].sort(
+    return [...pageViews, ...formEvents].sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-  }, [data?.pageViews]);
+  }, [data]);
 
-  // Sorted form events (most recent first)
-  const sortedFormEvents = useMemo(() => {
-    return [...processedFormEvents].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-  }, [processedFormEvents]);
+  // Paginated timeline items
+  const paginatedTimeline = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return timeline.slice(start, start + pageSize);
+  }, [timeline, page, pageSize]);
 
-  // Paginated page views
-  const paginatedPageViews = useMemo(() => {
-    const start = (pvPage - 1) * pvPageSize;
-    return sortedPageViews.slice(start, start + pvPageSize);
-  }, [sortedPageViews, pvPage, pvPageSize]);
-
-  // Paginated form events
-  const paginatedFormEvents = useMemo(() => {
-    const start = (fePage - 1) * fePageSize;
-    return sortedFormEvents.slice(start, start + fePageSize);
-  }, [sortedFormEvents, fePage, fePageSize]);
-
-  // Reset to page 1 when page size changes
-  const handlePvPageSizeChange = (size: number) => {
-    setPvPageSize(size);
-    setPvPage(1);
-  };
-
-  const handleFePageSizeChange = (size: number) => {
-    setFePageSize(size);
-    setFePage(1);
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
   };
 
   // Format metadata for display
@@ -397,7 +395,7 @@ export default function LeadDetailPage() {
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">Visitor</h2>
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Visitor Info</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-slate-500">Device</div>
@@ -432,182 +430,154 @@ export default function LeadDetailPage() {
             <div className="font-medium text-slate-900">{formatDateTime(visitor?.lastSeenAt)}</div>
           </div>
           <div>
-            <div className="text-slate-500">Time on Site</div>
+            <div className="text-slate-500">Total Time on Site</div>
             <div className="font-medium text-slate-900">{formatSeconds(visitor?.totalTimeOnSite)}</div>
           </div>
         </div>
       </div>
 
-      {/* Form Events - Collapsible */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <button
-          onClick={() => setFormEventsExpanded(!formEventsExpanded)}
-          className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors"
-        >
-          <h2 className="text-lg font-semibold text-slate-900">
-            Form Events ({sortedFormEvents.length})
-          </h2>
-          <svg
-            className={`w-5 h-5 text-slate-500 transition-transform ${formEventsExpanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+      {/* Unified User Activity Timeline */}
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">User Activity Timeline</h2>
+          <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
+            {timeline.length} Total Events
+          </span>
+        </div>
 
-        {formEventsExpanded && (
-          <div className="px-6 pb-6 border-t border-slate-100">
-            <div className="pt-4">
-              {sortedFormEvents.length > 0 ? (
-                <>
-                  <PaginationControls
-                    totalItems={sortedFormEvents.length}
-                    currentPage={fePage}
-                    pageSize={fePageSize}
-                    onPageChange={setFePage}
-                    onPageSizeChange={handleFePageSizeChange}
-                  />
-                  <div className="space-y-2">
-                    {paginatedFormEvents.map((event) => {
-                      const isExpanded = expandedEventIds.has(event.id);
-                      const showRaw = showRawJson.has(event.id);
-                      const metadataEntries = event.metadata ? Object.entries(event.metadata) : [];
+        <div className="p-6">
+          {timeline.length > 0 ? (
+            <>
+              <PaginationControls
+                totalItems={timeline.length}
+                currentPage={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
 
-                      return (
-                        <div key={event.id} className="border border-slate-100 rounded-lg overflow-hidden">
+              <div className="relative mt-4">
+                {/* Vertical line connecting icons */}
+                <div className="absolute left-[1.35rem] top-2 bottom-4 w-0.5 bg-slate-100"></div>
+
+                <div className="space-y-6">
+                  {paginatedTimeline.map((item) => {
+                    const isExpanded = expandedEventIds.has(item.id);
+                    const showRaw = showRawJson.has(item.id);
+                    const metadataEntries = item.metadata ? Object.entries(item.metadata) : [];
+                    const isFormEvent = item.type === 'form_event';
+
+                    return (
+                      <div key={item.id} className="relative pl-12">
+                        {/* Icon Container */}
+                        <div className="absolute left-0 top-0 w-11 h-11 rounded-full bg-white border-2 border-slate-50 flex items-center justify-center z-10 shadow-sm">
+                          {item.type === 'page_view' ? (
+                            <span className="text-lg" title="Page View">📄</span>
+                          ) : (
+                            <span className="text-lg" title="Form Interaction">📝</span>
+                          )}
+                        </div>
+
+                        <div className={`rounded-lg border transition-all ${isExpanded ? 'border-primary-200 bg-primary-50/10' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
                           <div
-                            className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50"
-                            onClick={() => toggleEventExpanded(event.id)}
+                            className={`p-3 ${isFormEvent ? 'cursor-pointer' : ''}`}
+                            onClick={() => isFormEvent && toggleEventExpanded(item.id)}
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">📝</span>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                               <div>
-                                <div className="text-sm font-medium text-slate-900">
-                                  {event.eventType}
-                                  {event.step !== undefined && event.step !== null && (
-                                    <span className="ml-2 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                                      Step {event.step}
+                                <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                  {item.label}
+                                  {item.step !== undefined && item.step !== null && (
+                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded">
+                                      Step {item.step}
+                                    </span>
+                                  )}
+                                  {item.type === 'form_event' && (
+                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                      Form
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-xs text-slate-500">{formatDateTime(event.timestamp)}</div>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  {formatDateTime(item.timestamp)}
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {metadataEntries.length > 0 && (
-                                <span className="text-xs text-slate-400">
-                                  {metadataEntries.length} field{metadataEntries.length !== 1 ? 's' : ''}
-                                </span>
+
+                              {isFormEvent && (
+                                <div className="flex items-center gap-2">
+                                  {metadataEntries.length > 0 && (
+                                    <span className="text-[11px] text-slate-400 font-medium">
+                                      {metadataEntries.length} field{metadataEntries.length !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  <svg
+                                    className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
                               )}
-                              <svg
-                                className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
                             </div>
                           </div>
 
-                          {isExpanded && metadataEntries.length > 0 && (
-                            <div className="border-t border-slate-100 bg-slate-50 p-3">
+                          {isExpanded && isFormEvent && metadataEntries.length > 0 && (
+                            <div className="border-t border-slate-100 bg-white p-4 animate-in fade-in slide-in-from-top-1 duration-200">
                               {!showRaw ? (
-                                <div className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                                   {metadataEntries.map(([key, value]) => (
-                                    <div key={key} className="flex text-sm">
-                                      <span className="text-slate-500 w-32 flex-shrink-0">{key}:</span>
-                                      <span className="text-slate-900 break-all">{formatMetadataValue(value)}</span>
+                                    <div key={key} className="flex flex-col py-1 border-b border-slate-50 last:border-0">
+                                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-tight">{key}</span>
+                                      <span className="text-sm text-slate-900 break-all">{formatMetadataValue(value)}</span>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <pre className="text-xs bg-slate-900 text-green-400 p-3 rounded overflow-x-auto">
-                                  {JSON.stringify(event.metadata, null, 2)}
-                                </pre>
+                                <div className="relative">
+                                  <pre className="text-xs bg-slate-900 text-green-400 p-4 rounded-lg overflow-x-auto">
+                                    {JSON.stringify(item.metadata, null, 2)}
+                                  </pre>
+                                </div>
                               )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleRawJson(event.id);
-                                }}
-                                className="mt-2 text-xs text-primary-600 hover:text-primary-700"
-                              >
-                                {showRaw ? 'Show formatted' : 'View raw JSON'}
-                              </button>
+                              <div className="mt-3 pt-3 border-t border-slate-50 flex justify-end">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleRawJson(item.id);
+                                  }}
+                                  className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                                >
+                                  {showRaw ? (
+                                    <>
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                                      Show formatted
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                                      View raw JSON
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="text-slate-500 text-sm">No form events recorded</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Page Views - Collapsible */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <button
-          onClick={() => setPageViewsExpanded(!pageViewsExpanded)}
-          className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors"
-        >
-          <h2 className="text-lg font-semibold text-slate-900">
-            Page Views ({sortedPageViews.length})
-          </h2>
-          <svg
-            className={`w-5 h-5 text-slate-500 transition-transform ${pageViewsExpanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        {pageViewsExpanded && (
-          <div className="px-6 pb-6 border-t border-slate-100">
-            <div className="pt-4">
-              {sortedPageViews.length > 0 ? (
-                <>
-                  <PaginationControls
-                    totalItems={sortedPageViews.length}
-                    currentPage={pvPage}
-                    pageSize={pvPageSize}
-                    onPageChange={setPvPage}
-                    onPageSizeChange={handlePvPageSizeChange}
-                  />
-                  <div className="space-y-2">
-                    {paginatedPageViews.map((view) => (
-                      <div
-                        key={view.id}
-                        className="flex items-center justify-between p-3 border border-slate-100 rounded-lg text-sm"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-lg flex-shrink-0">📄</span>
-                          <span className="font-medium text-slate-900 truncate">
-                            {view.pageUrl?.replace(/^https?:\/\/[^/]+/, '') || '—'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-500 flex-shrink-0 ml-4">
-                          {formatDateTime(view.timestamp)}
-                        </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-slate-500 text-sm">No page views recorded</p>
-              )}
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+              <span className="text-4xl">🕰️</span>
+              <p className="mt-2 text-sm text-slate-500">No activity recorded for this visitor yet.</p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
