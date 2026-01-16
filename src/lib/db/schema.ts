@@ -148,6 +148,8 @@ export const bookings = sqliteTable('bookings', {
   // Integration IDs
   hubspotContactId: text('hubspot_contact_id'),
   hubspotDealId: text('hubspot_deal_id'),
+  hubspotDealStage: text('hubspot_deal_stage'), // HubSpot deal stage (synced from HubSpot)
+  hubspotDealStageSyncedAt: text('hubspot_deal_stage_synced_at'), // Last sync time
   googleEventId: text('google_event_id'),
   googleMeetLink: text('google_meet_link'),
   

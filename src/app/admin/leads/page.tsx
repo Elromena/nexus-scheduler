@@ -16,6 +16,7 @@ interface Lead {
   scheduledTime: string | null;
   status: string;
   attributionSource: string | null;
+  attributionReferrer: string | null;
   createdAt: string;
 }
 
@@ -153,7 +154,7 @@ export default function LeadsPage() {
                   <th>Email</th>
                   <th>Website</th>
                   <th>Schedule</th>
-                  <th>Source</th>
+                  <th>Referrer</th>
                   <th>Status</th>
                   <th>Created</th>
                 </tr>
@@ -185,7 +186,11 @@ export default function LeadsPage() {
                         ? `${lead.scheduledDate} ${lead.scheduledTime}`
                         : '-'}
                     </td>
-                    <td>{lead.attributionSource || 'Direct'}</td>
+                    <td className="max-w-[200px] truncate" title={lead.attributionReferrer || 'Direct'}>
+                      {lead.attributionReferrer 
+                        ? lead.attributionReferrer.replace(/^https?:\/\//, '').split('/')[0]
+                        : 'Direct'}
+                    </td>
                     <td>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(lead.status)}`}>
                         {lead.status}
