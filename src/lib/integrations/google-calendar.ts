@@ -231,12 +231,19 @@ export class GoogleCalendarClient {
     startTime: string;
     endTime: string;
     attendeeEmail: string;
+    timeZone?: string; // IANA timezone e.g. "America/New_York"
   }): Promise<CalendarEvent> {
     const event: CalendarEvent = {
       summary: eventData.summary,
       description: eventData.description,
-      start: { dateTime: eventData.startTime },
-      end: { dateTime: eventData.endTime },
+      start: { 
+        dateTime: eventData.startTime,
+        timeZone: eventData.timeZone, // Include timezone for correct display
+      },
+      end: { 
+        dateTime: eventData.endTime,
+        timeZone: eventData.timeZone,
+      },
       attendees: [{ email: eventData.attendeeEmail }],
       conferenceData: {
         createRequest: {

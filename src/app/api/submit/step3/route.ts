@@ -83,14 +83,29 @@ export async function POST(request: NextRequest) {
     let googleMeetLink = '';
     let googleEventId = '';
 
+    // Get host timezone and email from settings
+    const hostTimezoneSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'host_timezone'))
+      .get();
+    const hostEmailSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'host_email'))
+      .get();
+    
+    const hostTimezone = hostTimezoneSetting?.value || 'America/New_York';
+    const calendarEmail = hostEmailSetting?.value || env.GOOGLE_CALENDAR_EMAIL;
+
     // If not test mode, verify slot is still available and create calendar event
     if (!isTestMode) {
       // Check Google Calendar availability
-      if (env.GOOGLE_SERVICE_ACCOUNT && env.GOOGLE_CALENDAR_EMAIL) {
+      if (env.GOOGLE_SERVICE_ACCOUNT && calendarEmail) {
         try {
           const calendar = getGoogleCalendarClient(
             env.GOOGLE_SERVICE_ACCOUNT,
-            env.GOOGLE_CALENDAR_EMAIL
+            calendarEmail
           );
 
           // Verify slot is still available
@@ -103,8 +118,13 @@ export async function POST(request: NextRequest) {
           }
 
           // Create calendar event with Google Meet
-          const startTime = toISODateTime(validData.date, validData.time);
-          const endTime = toISODateTime(validData.date, validData.time, 30);
+          // Format: "2026-01-20T10:30:00" (without UTC suffix, with timezone property)
+          const startTime = `${validData.date}T${validData.time}:00`;
+          const endTime = (() => {
+            const [hours, minutes] = validData.time.split(':').map(Number);
+            const endDate = new Date(2000, 0, 1, hours, minutes + 30);
+            return `${validData.date}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
+          })();
 
           const event = await calendar.createEvent({
             summary: `Nexus Verification: ${validData.firstName} ${validData.lastName}`,
@@ -112,6 +132,7 @@ export async function POST(request: NextRequest) {
             startTime,
             endTime,
             attendeeEmail: validData.email,
+            timeZone: hostTimezone, // Pass the host timezone
           });
 
           googleEventId = event.id || '';

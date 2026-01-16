@@ -120,7 +120,14 @@ export async function POST(request: NextRequest) {
 
     // Get Google Calendar credentials
     const googleCreds = env.GOOGLE_SERVICE_ACCOUNT;
-    const calendarEmail = env.GOOGLE_CALENDAR_EMAIL;
+    
+    // Get host email from settings (with fallback to env var)
+    const hostEmailSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'host_email'))
+      .get();
+    const calendarEmail = hostEmailSetting?.value || env.GOOGLE_CALENDAR_EMAIL;
 
     if (!googleCreds || !calendarEmail) {
       console.error('Google Calendar credentials not configured');

@@ -218,20 +218,34 @@ const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Common timezones for dropdown
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (ET) - New York' },
+  { value: 'America/Chicago', label: 'Central Time (CT) - Chicago' },
+  { value: 'America/Denver', label: 'Mountain Time (MT) - Denver' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT) - Los Angeles' },
+  { value: 'America/Anchorage', label: 'Alaska Time - Anchorage' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time - Honolulu' },
+  { value: 'Europe/London', label: 'GMT/BST - London' },
+  { value: 'Europe/Paris', label: 'CET - Paris, Berlin' },
+  { value: 'Europe/Moscow', label: 'MSK - Moscow' },
+  { value: 'Asia/Dubai', label: 'GST - Dubai' },
+  { value: 'Asia/Kolkata', label: 'IST - India' },
+  { value: 'Asia/Singapore', label: 'SGT - Singapore' },
+  { value: 'Asia/Tokyo', label: 'JST - Tokyo' },
+  { value: 'Australia/Sydney', label: 'AEST - Sydney' },
+  { value: 'Pacific/Auckland', label: 'NZST - Auckland' },
+  { value: 'Africa/Lagos', label: 'WAT - Lagos, Nigeria' },
+  { value: 'Africa/Johannesburg', label: 'SAST - Johannesburg' },
+  { value: 'Africa/Cairo', label: 'EET - Cairo' },
+];
+
 export default function SettingsPage() {
-  // Integration status
-  const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState<{
-    testMode: boolean;
-    hubspotConfigured: boolean;
-    googleServiceAccountConfigured: boolean;
-    googleCalendarEmailConfigured: boolean;
-  } | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  
   // DB Settings
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [testMode, setTestMode] = useState(false);
+  const [hostTimezone, setHostTimezone] = useState('America/New_York');
+  const [hostEmail, setHostEmail] = useState('');
   const [calendarSlots, setCalendarSlots] = useState<string[]>([]);
   const [newSlot, setNewSlot] = useState('');
   const [calendarConfig, setCalendarConfig] = useState<CalendarConfig>(DEFAULT_CALENDAR_CONFIG);
@@ -268,6 +282,8 @@ export default function SettingsPage() {
       const data = result.data || {};
       
       setTestMode(data.test_mode === 'true');
+      setHostTimezone(data.host_timezone || 'America/New_York');
+      setHostEmail(data.host_email || '');
       
       // Parse calendar slots
       try {
@@ -304,6 +320,8 @@ export default function SettingsPage() {
         },
         body: JSON.stringify({
           test_mode: testMode ? 'true' : 'false',
+          host_timezone: hostTimezone,
+          host_email: hostEmail,
           calendar_slots: JSON.stringify(calendarSlots),
           calendar_config: JSON.stringify(calendarConfig),
         }),
@@ -355,33 +373,6 @@ export default function SettingsPage() {
       ...prev,
       blockedDates: prev.blockedDates.filter(d => d !== date)
     }));
-  };
-
-  const handleVerify = async () => {
-    setChecking(true);
-    setStatusError(null);
-    try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch('/scheduler/api/status', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('admin_token');
-          window.location.reload();
-          return;
-        }
-        throw new Error('Failed to check status');
-      }
-
-      const result = await response.json();
-      setStatus(result.data);
-    } catch (err) {
-      setStatusError(err instanceof Error ? err.message : 'Failed to check status');
-    } finally {
-      setChecking(false);
-    }
   };
 
   const handleReset = async () => {
@@ -473,15 +464,54 @@ export default function SettingsPage() {
                 {testMode ? 'Test mode ON - integrations disabled' : 'Live mode - integrations active'}
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                This setting overrides the TEST_MODE environment variable. Remember to click "Save Changes" after toggling.
+                Remember to click "Save Changes" after toggling.
               </p>
+            </div>
+
+            {/* Host Settings */}
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="font-semibold text-slate-900 mb-2">Host Settings</div>
+              <p className="text-sm text-slate-600 mb-4">
+                Configure your meeting host details. These are used for calendar events.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Host Timezone</label>
+                  <select
+                    value={hostTimezone}
+                    onChange={(e) => setHostTimezone(e.target.value)}
+                    className="form-input w-full"
+                  >
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Your availability times are set in this timezone
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Calendar Email</label>
+                  <input
+                    type="email"
+                    value={hostEmail}
+                    onChange={(e) => setHostEmail(e.target.value)}
+                    placeholder="team@yourdomain.com"
+                    className="form-input w-full"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Google Calendar email for events. Falls back to env var if empty.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Calendar Availability Settings */}
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="font-semibold text-slate-900 mb-2">Calendar Availability</div>
               <p className="text-sm text-slate-600 mb-4">
-                Configure which days and hours are available for booking
+                Configure which days and hours are available for booking (in host timezone)
               </p>
               
               {/* Available Days */}
@@ -656,58 +686,9 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Integration Status */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">Integration Status</h2>
-          <button onClick={handleVerify} className="btn-outline" disabled={checking}>
-            {checking ? 'Checking...' : 'Verify Integrations'}
-          </button>
-        </div>
-
-        {statusError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {statusError}
-          </div>
-        )}
-
-        {status && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="p-4 bg-slate-50 rounded-lg flex items-center justify-between">
-              <div className="font-semibold">HubSpot</div>
-              <div className={`flex items-center gap-2 ${status.hubspotConfigured ? 'text-green-700' : 'text-red-700'}`}>
-                <span className={`w-2 h-2 rounded-full ${status.hubspotConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                {status.hubspotConfigured ? 'Connected' : 'Not configured'}
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-lg flex items-center justify-between">
-              <div className="font-semibold">Google Service Account</div>
-              <div className={`flex items-center gap-2 ${status.googleServiceAccountConfigured ? 'text-green-700' : 'text-red-700'}`}>
-                <span className={`w-2 h-2 rounded-full ${status.googleServiceAccountConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                {status.googleServiceAccountConfigured ? 'Connected' : 'Not configured'}
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-lg flex items-center justify-between">
-              <div className="font-semibold">Google Calendar</div>
-              <div className={`flex items-center gap-2 ${status.googleCalendarEmailConfigured ? 'text-green-700' : 'text-red-700'}`}>
-                <span className={`w-2 h-2 rounded-full ${status.googleCalendarEmailConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                {status.googleCalendarEmailConfigured ? 'Connected' : 'Not configured'}
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-lg flex items-center justify-between">
-              <div className="font-semibold">Test Mode</div>
-              <div className={`flex items-center gap-2 ${status.testMode ? 'text-amber-700' : 'text-green-700'}`}>
-                <span className={`w-2 h-2 rounded-full ${status.testMode ? 'bg-amber-500' : 'bg-green-500'}`}></span>
-                {status.testMode ? 'Enabled' : 'Disabled (Live)'}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Environment Variables */}
       <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-2">Environment Variables</h2>
+        <h2 className="text-lg font-semibold text-slate-900 mb-2">Environment Variables (Secrets)</h2>
         <p className="text-slate-600 mb-4 text-sm">
           These are configured in your <strong>Webflow Cloud dashboard</strong> → Environment Variables. 
           They cannot be changed from here for security reasons.
@@ -728,10 +709,6 @@ export default function SettingsPage() {
             <code className="font-mono bg-slate-200 px-2 py-0.5 rounded text-xs">GOOGLE_SERVICE_ACCOUNT</code>
             <span className="text-slate-600">Google credentials JSON (stringified)</span>
             <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Secret</span>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-            <code className="font-mono bg-slate-200 px-2 py-0.5 rounded text-xs">GOOGLE_CALENDAR_EMAIL</code>
-            <span className="text-slate-600">Calendar email for events</span>
           </div>
         </div>
       </div>
