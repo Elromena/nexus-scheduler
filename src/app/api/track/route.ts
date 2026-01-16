@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     
     // Use client timezone as additional fallback for country detection
-    const clientTimezone = event.data?.clientTimezone;
+    const clientTimezone = typeof event.data?.clientTimezone === 'string' ? event.data.clientTimezone : null;
     if (clientTimezone && geo.countryCode === 'US') {
       // If server says US but client timezone suggests otherwise, use client timezone
       const inferredCountry = inferCountryFromTimezone(clientTimezone);
