@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, isNotNull, sql } from 'drizzle-orm';
+import { eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 export async function POST(request: NextRequest) {
