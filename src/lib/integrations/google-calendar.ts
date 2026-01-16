@@ -286,6 +286,80 @@ export class GoogleCalendarClient {
   }
 
   /**
+   * Update an existing calendar event
+   */
+  async updateEvent(eventId: string, eventData: {
+    summary?: string;
+    description?: string;
+    startTime?: string;
+    endTime?: string;
+    timeZone?: string;
+  }): Promise<CalendarEvent> {
+    const updatePayload: Partial<CalendarEvent> = {};
+    
+    if (eventData.summary) {
+      updatePayload.summary = eventData.summary;
+    }
+    if (eventData.description) {
+      updatePayload.description = eventData.description;
+    }
+    if (eventData.startTime) {
+      updatePayload.start = { 
+        dateTime: eventData.startTime,
+        timeZone: eventData.timeZone,
+      };
+    }
+    if (eventData.endTime) {
+      updatePayload.end = { 
+        dateTime: eventData.endTime,
+        timeZone: eventData.timeZone,
+      };
+    }
+
+    const params = new URLSearchParams({
+      sendUpdates: 'all',
+    });
+
+    const result = await this.request(
+      `/calendars/primary/events/${eventId}?${params}`,
+      'PATCH',
+      updatePayload
+    ) as CalendarEvent;
+
+    return result;
+  }
+
+  /**
+   * Delete a calendar event
+   */
+  async deleteEvent(eventId: string): Promise<void> {
+    const params = new URLSearchParams({
+      sendUpdates: 'all', // Notify attendees
+    });
+
+    await this.request(
+      `/calendars/primary/events/${eventId}?${params}`,
+      'DELETE'
+    );
+  }
+
+  /**
+   * Get a single event by ID
+   */
+  async getEvent(eventId: string): Promise<CalendarEvent | null> {
+    try {
+      const result = await this.request(
+        `/calendars/primary/events/${eventId}`,
+        'GET'
+      ) as CalendarEvent;
+      return result;
+    } catch (error) {
+      console.error('Error getting event:', error);
+      return null;
+    }
+  }
+
+  /**
    * Test connection by attempting to get an access token
    * Returns true if credentials are valid
    */

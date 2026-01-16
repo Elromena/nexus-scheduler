@@ -182,6 +182,22 @@ export const settings = sqliteTable('settings', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
+// =============================================
+// VERIFICATION CODES TABLE
+// For email verification (manage bookings)
+// =============================================
+export const verificationCodes = sqliteTable('verification_codes', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull(),
+  code: text('code').notNull(),
+  expiresAt: text('expires_at').notNull(),
+  usedAt: text('used_at'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  emailIdx: index('idx_verification_codes_email').on(table.email),
+  codeIdx: index('idx_verification_codes_code').on(table.code),
+}));
+
 // Type exports
 export type Visitor = typeof visitors.$inferSelect;
 export type NewVisitor = typeof visitors.$inferInsert;
@@ -195,3 +211,5 @@ export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
+export type VerificationCode = typeof verificationCodes.$inferSelect;
+export type NewVerificationCode = typeof verificationCodes.$inferInsert;
