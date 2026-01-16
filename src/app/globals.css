@@ -34,7 +34,8 @@ body {
 }
 
 body.embedded-scheduler {
-  background: transparent;
+  background: transparent !important;
+  overflow: hidden;
 }
 
 /* =========================================
@@ -47,15 +48,29 @@ body.embedded-scheduler {
 }
 
 body.embedded-scheduler .scheduler-container {
-  min-height: 0;
-  padding: 0;
-  align-items: flex-start;
-  background: transparent;
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  padding: 16px;
+  display: flex;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
 }
 
 .scheduler-card {
   @apply w-full max-w-2xl bg-white rounded-xl shadow-modal border border-slate-100;
   @apply p-8 md:p-12;
+  transition: all 0.3s ease;
+}
+
+body.embedded-scheduler .scheduler-card {
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  padding: 2rem;
+  background: white !important; /* Card has white bg, modal wrapper is transparent */
 }
 
 /* =========================================
@@ -316,8 +331,22 @@ body.embedded-scheduler .scheduler-container {
     padding-top: 24px;
     padding-bottom: 24px;
   }
+  
+  /* Keep centering for embedded scheduler on mobile */
+  body.embedded-scheduler .scheduler-container {
+    align-items: center !important;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  
   .scheduler-card {
     @apply p-6;
+  }
+  
+  body.embedded-scheduler .scheduler-card {
+    padding: 1.5rem;
+    max-width: 100%;
+    border-radius: 0;
   }
   
   .admin-sidebar {

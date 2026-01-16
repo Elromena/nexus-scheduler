@@ -4,12 +4,26 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
+interface FormEvent {
+  id: string;
+  eventType: string;
+  step?: number;
+  timestamp: string;
+  metadata: string | Record<string, unknown> | null;
+}
+
+interface PageView {
+  id: string;
+  pageUrl: string;
+  timestamp: string;
+}
+
 interface LeadDetails {
   booking: Record<string, unknown>;
   visitor: Record<string, unknown> | null;
   sessions: Array<Record<string, unknown>>;
-  pageViews: Array<Record<string, unknown>>;
-  formEvents: Array<Record<string, unknown>>;
+  pageViews: Array<PageView>;
+  formEvents: Array<FormEvent>;
 }
 
 export default function LeadDetailPage() {
@@ -35,19 +49,27 @@ export default function LeadDetailPage() {
     return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
   };
 
-  const formEvents = useMemo(() => {
+  const processedFormEvents = useMemo(() => {
     if (!data?.formEvents) return [];
     return data.formEvents.map((event) => {
       const metadataRaw = event.metadata;
-      let metadata: Record<string, unknown> | null = null;
+      let parsedMetadata: Record<string, unknown> | null = null;
       if (typeof metadataRaw === 'string') {
         try {
-          metadata = JSON.parse(metadataRaw);
+          parsedMetadata = JSON.parse(metadataRaw);
         } catch {
-          metadata = null;
+          parsedMetadata = null;
         }
+      } else if (typeof metadataRaw === 'object') {
+        parsedMetadata = metadataRaw as Record<string, unknown> | null;
       }
-      return { ...event, metadata };
+      return {
+        id: event.id,
+        eventType: event.eventType,
+        step: event.step,
+        timestamp: event.timestamp,
+        metadata: parsedMetadata,
+      };
     });
   }, [data?.formEvents]);
 
@@ -273,16 +295,16 @@ export default function LeadDetailPage() {
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Form Events</h2>
         <div className="space-y-3">
-          {formEvents.map((event, index) => (
-            <div key={String(event.id || index)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3">
+          {processedFormEvents.map((event) => (
+            <div key={event.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">
-                  {String(event.eventType)} {event.step ? `(Step ${event.step})` : ''}
+                  {event.eventType} {event.step ? `(Step ${event.step})` : ''}
                 </div>
                 <div className="text-xs text-slate-500">{formatDateTime(event.timestamp)}</div>
               </div>
               <div className="text-xs text-slate-600 break-all">
-                {event.metadata ? JSON.stringify(event.metadata) : String(event.metadata || '')}
+                {event.metadata ? JSON.stringify(event.metadata) : ''}
               </div>
             </div>
           ))}
@@ -292,9 +314,9 @@ export default function LeadDetailPage() {
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Page Views</h2>
         <div className="space-y-2">
-          {data.pageViews.map((view, index) => (
-            <div key={String(view.id || index)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3 text-sm">
-              <div className="font-medium text-slate-900 break-all">{String(view.pageUrl || '—')}</div>
+          {data.pageViews.map((view) => (
+            <div key={view.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border border-slate-100 rounded-lg p-3 text-sm">
+              <div className="font-medium text-slate-900 break-all">{view.pageUrl || '—'}</div>
               <div className="text-xs text-slate-500">{formatDateTime(view.timestamp)}</div>
             </div>
           ))}
