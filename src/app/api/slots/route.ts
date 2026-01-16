@@ -98,15 +98,26 @@ export async function POST(request: NextRequest) {
       .get();
 
     let allSlots: string[];
+    let usingCustomSlots = false;
+    
     if (slotsSetting?.value) {
       try {
-        allSlots = JSON.parse(slotsSetting.value);
+        const parsed = JSON.parse(slotsSetting.value);
+        // Only use custom slots if array actually has items
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          allSlots = parsed;
+          usingCustomSlots = true;
+        } else {
+          allSlots = generateSlotsFromBusinessHours(calendarConfig);
+        }
       } catch {
         allSlots = generateSlotsFromBusinessHours(calendarConfig);
       }
     } else {
       allSlots = generateSlotsFromBusinessHours(calendarConfig);
     }
+    
+    console.log(`Slots: Using ${usingCustomSlots ? 'custom slots' : 'business hours'} (${allSlots.length} slots)`)
 
     // If in test mode, return mock available slots
     if (isTestMode) {
