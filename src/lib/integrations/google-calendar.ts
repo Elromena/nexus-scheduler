@@ -277,6 +277,20 @@ export class GoogleCalendarClient {
     
     return true;
   }
+
+  /**
+   * Test connection by attempting to get an access token
+   * Returns true if credentials are valid
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      const token = await this.getAccessToken();
+      return !!token;
+    } catch (error) {
+      console.error('Google Calendar connection test failed:', error);
+      return false;
+    }
+  }
 }
 
 /**

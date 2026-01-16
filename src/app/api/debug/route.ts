@@ -142,16 +142,16 @@ export async function POST(request: NextRequest) {
             env.GOOGLE_SERVICE_ACCOUNT,
             env.GOOGLE_CALENDAR_EMAIL
           );
-          // Test by getting access token (validates credentials)
-          const accessToken = await calendar.getAccessToken();
-          if (accessToken) {
+          // Test by validating credentials
+          const connected = await calendar.testConnection();
+          if (connected) {
             results.google = { 
               success: true, 
               message: `Google Calendar connected for: ${env.GOOGLE_CALENDAR_EMAIL}`,
               data: { calendarEmail: env.GOOGLE_CALENDAR_EMAIL }
             };
           } else {
-            results.google = { success: false, message: 'Failed to get Google access token' };
+            results.google = { success: false, message: 'Failed to authenticate with Google' };
           }
         } catch (err) {
           results.google = { success: false, message: `Google error: ${err}` };
