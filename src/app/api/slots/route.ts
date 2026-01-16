@@ -63,6 +63,10 @@ export async function POST(request: NextRequest) {
     const dateObj = new Date(year, month - 1, day);
     const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/slots/route.ts:66',message:'Slot check day info',data:{date,dayOfWeek,availableDays:calendarConfig.availableDays},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+
     // Check if day is available
     if (!calendarConfig.availableDays.includes(dayOfWeek)) {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

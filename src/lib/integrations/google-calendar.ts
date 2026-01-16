@@ -203,6 +203,10 @@ export class GoogleCalendarClient {
     try {
       const events = await this.listEvents(date);
       
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'google-calendar.ts:207',message:'Google Calendar raw events',data:{date,eventCount:events.length,events:events.map(e=>({summary:e.summary,start:e.start,end:e.end}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
+      // #endregion
+
       // Extract busy times from events
       const busyTimes = new Set<string>();
       for (const event of events) {
@@ -214,7 +218,13 @@ export class GoogleCalendarClient {
       }
 
       // Filter out busy slots
-      return allSlots.filter(slot => !busyTimes.has(slot));
+      const available = allSlots.filter(slot => !busyTimes.has(slot));
+
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/2ef665dc-63e3-4159-9a06-c27f90fad640',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'google-calendar.ts:220',message:'Availability results',data:{busyTimes:Array.from(busyTimes),availableCount:available.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
+
+      return available;
     } catch (error) {
       console.error('Error getting availability:', error);
       // Return all slots if there's an error (fail open)
