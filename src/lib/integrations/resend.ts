@@ -30,7 +30,7 @@ export async function sendEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: params.from || 'Blockchain-Ads <noreply@blockchain-ads.com>',
+        from: params.from || 'Blockchain-Ads <noreply@scheduler.blockchain-ads.com>',
         to: params.to,
         subject: params.subject,
         html: params.html,
