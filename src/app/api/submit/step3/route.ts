@@ -134,7 +134,7 @@ Direct personalized onboarding and assistance for account verification
 Note: Access is limited, missed meetings move to the next available window (typically ~30 days).
 
 Need to make changes?
-Contact: team@blockchain-ads.com
+Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
 
 ─────────────────────────
 
