@@ -11,6 +11,11 @@ export default function SettingsPage() {
     googleCalendarEmailConfigured: boolean;
   } | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  
+  // Reset state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleVerify = async () => {
     setChecking(true);
@@ -38,6 +43,38 @@ export default function SettingsPage() {
       setStatusError(err instanceof Error ? err.message : 'Failed to check status');
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setResetting(true);
+    setResetMessage(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/reset', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: 'RESET_ALL_DATA' }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('admin_token');
+          window.location.reload();
+          return;
+        }
+        throw new Error('Failed to reset database');
+      }
+
+      setResetMessage({ type: 'success', text: 'Database has been reset successfully!' });
+      setShowResetConfirm(false);
+    } catch (err) {
+      setResetMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to reset' });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -157,7 +194,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Scheduler Trigger */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
+      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Scheduler Trigger</h2>
         <p className="text-slate-600 mb-4">
           Add this class to any button/link to open the scheduler:
@@ -171,6 +208,57 @@ export default function SettingsPage() {
         </p>
         <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-sm">
           https://yourdomain.com/scheduler
+        </div>
+      </div>
+
+      {/* Danger Zone - Reset Database */}
+      <div className="bg-white rounded-lg border border-red-200 p-6">
+        <h2 className="text-lg font-semibold text-red-700 mb-4">Danger Zone</h2>
+        
+        {resetMessage && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            resetMessage.type === 'success' 
+              ? 'bg-green-50 border border-green-200 text-green-700' 
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            {resetMessage.text}
+          </div>
+        )}
+
+        <div className="p-4 bg-red-50 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-slate-900">Reset Database</div>
+              <p className="text-sm text-slate-600 mt-1">
+                Delete all visitors, sessions, page views, form events, and bookings. This cannot be undone.
+              </p>
+            </div>
+            {!showResetConfirm ? (
+              <button 
+                onClick={() => setShowResetConfirm(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
+              >
+                Reset Data
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowResetConfirm(false)}
+                  className="px-3 py-2 text-slate-600 text-sm"
+                  disabled={resetting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleReset}
+                  disabled={resetting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                >
+                  {resetting ? 'Resetting...' : 'Yes, Delete All Data'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

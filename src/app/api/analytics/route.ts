@@ -307,6 +307,86 @@ export async function GET(request: NextRequest) {
     ]);
 
     // =============================================
+    // BOOKING LOCATIONS (people who converted)
+    // =============================================
+    const [
+      bookingCountries,
+      bookingCities,
+    ] = await Promise.all([
+      // Countries of people who booked
+      db.select({
+        country: schema.visitors.country,
+        count: sql<number>`count(*)`,
+      })
+        .from(schema.bookings)
+        .innerJoin(schema.visitors, eq(schema.bookings.visitorId, schema.visitors.id))
+        .where(and(
+          gte(schema.bookings.createdAt, startDateStr),
+          sql`${schema.visitors.country} IS NOT NULL`
+        ))
+        .groupBy(schema.visitors.country)
+        .orderBy(desc(sql`count(*)`))
+        .limit(10),
+
+      // Cities of people who booked
+      db.select({
+        city: schema.visitors.city,
+        country: schema.visitors.country,
+        count: sql<number>`count(*)`,
+      })
+        .from(schema.bookings)
+        .innerJoin(schema.visitors, eq(schema.bookings.visitorId, schema.visitors.id))
+        .where(and(
+          gte(schema.bookings.createdAt, startDateStr),
+          sql`${schema.visitors.city} IS NOT NULL`
+        ))
+        .groupBy(schema.visitors.city, schema.visitors.country)
+        .orderBy(desc(sql`count(*)`))
+        .limit(10),
+    ]);
+
+    // =============================================
+    // FORM OPEN LOCATIONS (unique visitors who opened form)
+    // =============================================
+    const [
+      formOpenCountries,
+      formOpenCities,
+    ] = await Promise.all([
+      // Countries of visitors who opened the form
+      db.select({
+        country: schema.visitors.country,
+        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
+      })
+        .from(schema.formEvents)
+        .innerJoin(schema.visitors, eq(schema.formEvents.visitorId, schema.visitors.id))
+        .where(and(
+          eq(schema.formEvents.eventType, 'form_opened'),
+          gte(schema.formEvents.timestamp, startDateStr),
+          sql`${schema.visitors.country} IS NOT NULL`
+        ))
+        .groupBy(schema.visitors.country)
+        .orderBy(desc(sql`count(DISTINCT ${schema.formEvents.visitorId})`))
+        .limit(10),
+
+      // Cities of visitors who opened the form
+      db.select({
+        city: schema.visitors.city,
+        country: schema.visitors.country,
+        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
+      })
+        .from(schema.formEvents)
+        .innerJoin(schema.visitors, eq(schema.formEvents.visitorId, schema.visitors.id))
+        .where(and(
+          eq(schema.formEvents.eventType, 'form_opened'),
+          gte(schema.formEvents.timestamp, startDateStr),
+          sql`${schema.visitors.city} IS NOT NULL`
+        ))
+        .groupBy(schema.visitors.city, schema.visitors.country)
+        .orderBy(desc(sql`count(DISTINCT ${schema.formEvents.visitorId})`))
+        .limit(10),
+    ]);
+
+    // =============================================
     // RECENT ACTIVITY
     // =============================================
     const recentVisitors = await db.select()
@@ -368,6 +448,14 @@ export async function GET(request: NextRequest) {
         funnel: {
           steps: funnelSteps,
           abandonment: formAbandonment,
+        },
+        bookingLocations: {
+          countries: bookingCountries,
+          cities: bookingCities,
+        },
+        formOpenLocations: {
+          countries: formOpenCountries,
+          cities: formOpenCities,
         },
         recentVisitors,
         dateRange: {

@@ -40,6 +40,14 @@ interface AnalyticsData {
     steps: Array<{ step: number; eventType: string; count: number }>;
     abandonment: Array<{ step: number; count: number }>;
   };
+  bookingLocations: {
+    countries: Array<{ country: string | null; count: number }>;
+    cities: Array<{ city: string | null; country: string | null; count: number }>;
+  };
+  formOpenLocations: {
+    countries: Array<{ country: string | null; count: number }>;
+    cities: Array<{ city: string | null; country: string | null; count: number }>;
+  };
 }
 
 export default function AnalyticsPage() {
@@ -561,6 +569,86 @@ export default function AnalyticsPage() {
               ) : (
                 <p className="text-slate-500 text-sm">No abandonment data yet</p>
               )}
+            </div>
+          </div>
+
+          {/* Booking Locations */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Booking Locations</h2>
+            <p className="text-sm text-slate-500 mb-4">Where your converted customers are located</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Countries (Bookings)</h3>
+                {data?.bookingLocations?.countries && data.bookingLocations.countries.length > 0 ? (
+                  <div className="space-y-2">
+                    {data.bookingLocations.countries.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded">
+                        <span className="text-sm text-slate-700">{item.country || 'Unknown'}</span>
+                        <span className="text-sm font-semibold text-green-700">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">No booking data yet</p>
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Cities (Bookings)</h3>
+                {data?.bookingLocations?.cities && data.bookingLocations.cities.length > 0 ? (
+                  <div className="space-y-2">
+                    {data.bookingLocations.cities.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded">
+                        <span className="text-sm text-slate-700">
+                          {item.city || 'Unknown'}{item.country ? `, ${item.country}` : ''}
+                        </span>
+                        <span className="text-sm font-semibold text-green-700">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">No booking data yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Form Open Locations */}
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Form Open Locations</h2>
+            <p className="text-sm text-slate-500 mb-4">Where visitors who opened the form are located (unique visitors)</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Countries (Form Opens)</h3>
+                {data?.formOpenLocations?.countries && data.formOpenLocations.countries.length > 0 ? (
+                  <div className="space-y-2">
+                    {data.formOpenLocations.countries.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <span className="text-sm text-slate-700">{item.country || 'Unknown'}</span>
+                        <span className="text-sm font-semibold text-blue-700">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">No form open data yet</p>
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Cities (Form Opens)</h3>
+                {data?.formOpenLocations?.cities && data.formOpenLocations.cities.length > 0 ? (
+                  <div className="space-y-2">
+                    {data.formOpenLocations.cities.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <span className="text-sm text-slate-700">
+                          {item.city || 'Unknown'}{item.country ? `, ${item.country}` : ''}
+                        </span>
+                        <span className="text-sm font-semibold text-blue-700">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">No form open data yet</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
