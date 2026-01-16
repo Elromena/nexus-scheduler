@@ -1,36 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import DateRangeSelector, { DatePreset } from '@/components/analytics/DateRangeSelector';
+import TrendChart from '@/components/analytics/TrendChart';
 
 interface AnalyticsData {
+  period: {
+    preset: string;
+    startDate: string;
+    endDate: string;
+    previousStartDate: string | null;
+    previousEndDate: string | null;
+  };
   overview: {
+    current: {
+      visitors: number;
+      sessions: number;
+      pageViews: number;
+      formOpens: number;
+      bookings: number;
+      conversionRate: number;
+      formConversionRate: number;
+      newVisitors: number;
+      returningVisitors: number;
+    };
+    previous: {
+      visitors: number;
+      sessions: number;
+      pageViews: number;
+      formOpens: number;
+      bookings: number;
+      conversionRate: number;
+      formConversionRate: number;
+      newVisitors: number;
+      returningVisitors: number;
+    } | null;
+    changes: {
+      visitors: number | null;
+      sessions: number | null;
+      pageViews: number | null;
+      formOpens: number | null;
+      bookings: number | null;
+      conversionRate: number | null;
+    } | null;
+  };
+  trend: Array<{
+    date: string;
     visitors: number;
-    sessions: number;
-    pageViews: number;
     formOpens: number;
     bookings: number;
-    conversionRate: number;
-    formConversionRate: number;
-    newVisitors: number;
-    returningVisitors: number;
-  };
-  engagement: {
-    avgSessionDuration: number;
-    avgPagesPerSession: number;
-    avgTimeOnSite: number;
-    avgScrollDepth: number;
-  };
+  }>;
   traffic: {
     sources: Array<{ source: string | null; count: number }>;
-    mediums: Array<{ medium: string | null; count: number }>;
-    campaigns: Array<{ campaign: string | null; count: number }>;
     referrers: Array<{ referrer: string; count: number }>;
     landingPages: Array<{ page: string; count: number }>;
   };
   devices: {
     types: Array<{ device: string | null; count: number }>;
     browsers: Array<{ browser: string | null; count: number }>;
-    operatingSystems: Array<{ os: string | null; count: number }>;
   };
   locations: {
     countries: Array<{ country: string | null; count: number }>;
@@ -38,34 +65,215 @@ interface AnalyticsData {
   };
   funnel: {
     steps: Array<{ step: number; eventType: string; count: number }>;
-    abandonment: Array<{ step: number; count: number }>;
   };
-  bookingLocations: {
-    countries: Array<{ country: string | null; count: number }>;
-    cities: Array<{ city: string | null; country: string | null; count: number }>;
+}
+
+// Metric card component
+function MetricCard({
+  label,
+  value,
+  change,
+  format = 'number',
+}: {
+  label: string;
+  value: number;
+  change?: number | null;
+  format?: 'number' | 'percent';
+}) {
+  const formatValue = (val: number) => {
+    if (format === 'percent') return `${val.toFixed(1)}%`;
+    return val.toLocaleString();
   };
-  formOpenLocations: {
-    countries: Array<{ country: string | null; count: number }>;
-    cities: Array<{ city: string | null; country: string | null; count: number }>;
+
+  const formatChange = (ch: number) => {
+    if (format === 'percent') return `${ch > 0 ? '+' : ''}${ch.toFixed(1)}pp`;
+    return `${ch > 0 ? '+' : ''}${ch.toFixed(0)}%`;
   };
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <div className="text-sm font-medium text-slate-500">{label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-bold text-slate-900">{formatValue(value)}</span>
+        {change !== null && change !== undefined && (
+          <span
+            className={`text-sm font-medium ${
+              change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-slate-500'
+            }`}
+          >
+            {change > 0 ? '↑' : change < 0 ? '↓' : '→'} {formatChange(Math.abs(change))}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Breakdown table component
+function BreakdownTable({
+  title,
+  data,
+  labelKey,
+  countKey = 'count',
+  total,
+}: {
+  title: string;
+  data: Array<Record<string, unknown>>;
+  labelKey: string;
+  countKey?: string;
+  total: number;
+}) {
+  const truncateUrl = (url: string) => {
+    if (!url) return '(direct)';
+    try {
+      const parsed = new URL(url);
+      return parsed.pathname.length > 30 
+        ? parsed.pathname.slice(0, 30) + '...' 
+        : parsed.pathname || '/';
+    } catch {
+      return url.length > 40 ? url.slice(0, 40) + '...' : url;
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <h3 className="text-sm font-semibold text-slate-900 mb-3">{title}</h3>
+      {data.length === 0 ? (
+        <p className="text-sm text-slate-500">No data available</p>
+      ) : (
+        <div className="space-y-2">
+          {data.slice(0, 5).map((item, idx) => {
+            const label = String(item[labelKey] || '(none)');
+            const count = Number(item[countKey] || 0);
+            const percentage = total > 0 ? (count / total) * 100 : 0;
+            const displayLabel = labelKey.includes('page') || labelKey.includes('referrer') 
+              ? truncateUrl(label) 
+              : label;
+
+            return (
+              <div key={idx}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700 truncate" title={label}>
+                    {displayLabel}
+                  </span>
+                  <span className="text-slate-500 ml-2">
+                    {count.toLocaleString()} ({percentage.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-500 rounded-full"
+                    style={{ width: `${Math.min(percentage, 100)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Funnel visualization
+function FunnelChart({ 
+  visitors, 
+  formOpens, 
+  steps, 
+  bookings 
+}: { 
+  visitors: number;
+  formOpens: number;
+  steps: Array<{ step: number; eventType: string; count: number }>;
+  bookings: number;
+}) {
+  const getStepCount = (eventType: string) => {
+    const step = steps.find(s => s.eventType === eventType);
+    return step?.count || 0;
+  };
+
+  const funnelData = [
+    { label: 'Visitors', count: visitors, color: 'bg-slate-400' },
+    { label: 'Form Opens', count: formOpens, color: 'bg-blue-400' },
+    { label: 'Step 1 Complete', count: getStepCount('step_completed'), color: 'bg-blue-500' },
+    { label: 'Booked', count: bookings, color: 'bg-green-500' },
+  ];
+
+  const maxCount = Math.max(...funnelData.map(d => d.count), 1);
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-4">
+      <h3 className="text-sm font-semibold text-slate-900 mb-4">Conversion Funnel</h3>
+      <div className="space-y-3">
+        {funnelData.map((item, idx) => {
+          const width = (item.count / maxCount) * 100;
+          const convRate = idx > 0 && funnelData[idx - 1].count > 0
+            ? ((item.count / funnelData[idx - 1].count) * 100).toFixed(1)
+            : null;
+
+          return (
+            <div key={item.label}>
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="text-slate-700">{item.label}</span>
+                <span className="text-slate-500">
+                  {item.count.toLocaleString()}
+                  {convRate && <span className="text-xs ml-1">({convRate}%)</span>}
+                </span>
+              </div>
+              <div className="h-6 bg-slate-100 rounded overflow-hidden">
+                <div
+                  className={`h-full ${item.color} rounded transition-all duration-500`}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {visitors > 0 && (
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">Overall Conversion Rate</span>
+            <span className="font-semibold text-green-600">
+              {((bookings / visitors) * 100).toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [days, setDays] = useState(30);
-  const [activeTab, setActiveTab] = useState<'overview' | 'traffic' | 'devices' | 'funnel'>('overview');
+  
+  // Date range state
+  const [preset, setPreset] = useState<DatePreset>('last30');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [compare, setCompare] = useState(true);
+  
+  // Active tab
+  const [activeTab, setActiveTab] = useState<'overview' | 'traffic' | 'funnel'>('overview');
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [days]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`/scheduler/api/analytics?days=${days}`, {
+      const params = new URLSearchParams({
+        preset,
+        compare: compare.toString(),
+      });
+      
+      if (preset === 'custom' && startDate && endDate) {
+        params.set('startDate', startDate);
+        params.set('endDate', endDate);
+      }
+
+      const response = await fetch(`/scheduler/api/analytics?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -82,577 +290,254 @@ export default function AnalyticsPage() {
 
       const result = await response.json();
       setData(result.data);
+      
+      // Update date display
+      if (result.data.period) {
+        setStartDate(result.data.period.startDate);
+        setEndDate(result.data.period.endDate);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
-  };
+  }, [preset, compare, startDate, endDate]);
 
-  const formatDuration = (seconds: number) => {
-    if (seconds < 60) return `${seconds}s`;
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}m ${secs}s`;
-  };
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
-  const getPercentage = (value: number, total: number) => {
-    if (total === 0) return 0;
-    return Math.round((value / total) * 100);
+  const handleDateChange = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="spinner border-primary-600 border-t-transparent w-8 h-8"></div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-        {error}
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+          {error}
+        </div>
       </div>
     );
   }
 
-  const funnelData = {
-    visitors: data?.overview.visitors || 0,
-    formOpens: data?.overview.formOpens || 0,
-    step1: data?.funnel.steps.find(f => f.step === 1 && f.eventType === 'step_completed')?.count || 0,
-    step2: data?.funnel.steps.find(f => f.step === 2 && f.eventType === 'step_completed')?.count || 0,
-    bookings: data?.overview.bookings || 0,
-  };
-
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
-        <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="form-select w-auto"
+        <button
+          onClick={fetchAnalytics}
+          disabled={loading}
+          className="btn-outline text-sm"
         >
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
       </div>
 
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-        <div className="stat-card">
-          <div className="stat-value">{data?.overview.visitors || 0}</div>
-          <div className="stat-label">Visitors</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{data?.overview.sessions || 0}</div>
-          <div className="stat-label">Sessions</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{data?.overview.pageViews || 0}</div>
-          <div className="stat-label">Page Views</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{data?.overview.formOpens || 0}</div>
-          <div className="stat-label">Form Opens</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{data?.overview.bookings || 0}</div>
-          <div className="stat-label">Bookings</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value text-green-600">{data?.overview.conversionRate || 0}%</div>
-          <div className="stat-label">Conversion</div>
-        </div>
-      </div>
+      {/* Date Range Selector */}
+      <DateRangeSelector
+        preset={preset}
+        startDate={startDate}
+        endDate={endDate}
+        compare={compare}
+        onPresetChange={setPreset}
+        onDateChange={handleDateChange}
+        onCompareChange={setCompare}
+      />
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-slate-200">
-        {(['overview', 'traffic', 'devices', 'funnel'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === tab
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {/* Overview Tab */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {/* Engagement Metrics */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Engagement Metrics</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {formatDuration(data?.engagement.avgSessionDuration || 0)}
-                </div>
-                <div className="text-sm text-slate-500">Avg Session Duration</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {data?.engagement.avgPagesPerSession || 0}
-                </div>
-                <div className="text-sm text-slate-500">Pages per Session</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {formatDuration(data?.engagement.avgTimeOnSite || 0)}
-                </div>
-                <div className="text-sm text-slate-500">Avg Time on Site</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {data?.engagement.avgScrollDepth || 0}%
-                </div>
-                <div className="text-sm text-slate-500">Avg Scroll Depth</div>
-              </div>
-            </div>
+      {loading && !data ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="spinner border-primary-600 border-t-transparent w-8 h-8"></div>
+        </div>
+      ) : data ? (
+        <>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard
+              label="Visitors"
+              value={data.overview.current.visitors}
+              change={data.overview.changes?.visitors}
+            />
+            <MetricCard
+              label="Form Opens"
+              value={data.overview.current.formOpens}
+              change={data.overview.changes?.formOpens}
+            />
+            <MetricCard
+              label="Bookings"
+              value={data.overview.current.bookings}
+              change={data.overview.changes?.bookings}
+            />
+            <MetricCard
+              label="Conversion Rate"
+              value={data.overview.current.conversionRate}
+              change={data.overview.changes?.conversionRate}
+              format="percent"
+            />
           </div>
 
-          {/* New vs Returning */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">New vs Returning Visitors</h3>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm text-slate-600">New</span>
-                    <span className="text-sm font-medium">{data?.overview.newVisitors || 0}</span>
-                  </div>
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 rounded-full"
-                      style={{ width: `${getPercentage(data?.overview.newVisitors || 0, data?.overview.visitors || 1)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm text-slate-600">Returning</span>
-                    <span className="text-sm font-medium">{data?.overview.returningVisitors || 0}</span>
-                  </div>
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${getPercentage(data?.overview.returningVisitors || 0, data?.overview.visitors || 1)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Trend Chart */}
+          <TrendChart data={data.trend} />
 
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Form Performance</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">{data?.overview.formOpens || 0}</div>
-                  <div className="text-sm text-slate-500">Form Opens</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-green-600">{data?.overview.formConversionRate || 0}%</div>
-                  <div className="text-sm text-slate-500">Form → Booking Rate</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Locations */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Top Countries</h3>
-              {data?.locations.countries && data.locations.countries.length > 0 ? (
-                <div className="space-y-3">
-                  {data.locations.countries.slice(0, 8).map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">{item.country || 'Unknown'}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-amber-500 rounded-full"
-                            style={{ width: `${getPercentage(item.count, data.overview.visitors)}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 w-10 text-right">{item.count}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Top Cities</h3>
-              {data?.locations.cities && data.locations.cities.length > 0 ? (
-                <div className="space-y-3">
-                  {data.locations.cities.slice(0, 8).map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">
-                        {item.city || 'Unknown'}{item.country ? `, ${item.country}` : ''}
-                      </span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Traffic Tab */}
-      {activeTab === 'traffic' && (
-        <div className="space-y-6">
-          {/* UTM Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Sources (utm_source)</h3>
-              {data?.traffic.sources && data.traffic.sources.length > 0 ? (
-                <div className="space-y-3">
-                  {data.traffic.sources.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">{item.source || 'Direct'}</span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Mediums (utm_medium)</h3>
-              {data?.traffic.mediums && data.traffic.mediums.length > 0 ? (
-                <div className="space-y-3">
-                  {data.traffic.mediums.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">{item.medium || 'None'}</span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Campaigns (utm_campaign)</h3>
-              {data?.traffic.campaigns && data.traffic.campaigns.length > 0 ? (
-                <div className="space-y-3">
-                  {data.traffic.campaigns.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700 truncate max-w-[150px]" title={item.campaign || ''}>
-                        {item.campaign || 'None'}
-                      </span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-          </div>
-
-          {/* Referrers & Landing Pages */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Top Referrers</h3>
-              {data?.traffic.referrers && data.traffic.referrers.length > 0 ? (
-                <div className="space-y-3">
-                  {data.traffic.referrers.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700 truncate max-w-[250px]" title={item.referrer}>
-                        {item.referrer?.replace(/^https?:\/\//, '').split('/')[0] || 'Direct'}
-                      </span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Top Landing Pages</h3>
-              {data?.traffic.landingPages && data.traffic.landingPages.length > 0 ? (
-                <div className="space-y-3">
-                  {data.traffic.landingPages.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700 truncate max-w-[250px]" title={item.page}>
-                        {item.page?.replace(/^https?:\/\/[^/]+/, '') || '/'}
-                      </span>
-                      <span className="text-sm font-medium text-slate-900">{item.count}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Devices Tab */}
-      {activeTab === 'devices' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Device Types</h3>
-              {data?.devices.types && data.devices.types.length > 0 ? (
-                <div className="space-y-3">
-                  {data.devices.types.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700 capitalize">{item.device || 'Unknown'}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500 rounded-full"
-                            style={{ width: `${getPercentage(item.count, data.overview.visitors)}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 w-10 text-right">{item.count}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Browsers</h3>
-              {data?.devices.browsers && data.devices.browsers.length > 0 ? (
-                <div className="space-y-3">
-                  {data.devices.browsers.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">{item.browser || 'Unknown'}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-green-500 rounded-full"
-                            style={{ width: `${getPercentage(item.count, data.overview.visitors)}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 w-10 text-right">{item.count}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Operating Systems</h3>
-              {data?.devices.operatingSystems && data.devices.operatingSystems.length > 0 ? (
-                <div className="space-y-3">
-                  {data.devices.operatingSystems.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-700">{item.os || 'Unknown'}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-purple-500 rounded-full"
-                            style={{ width: `${getPercentage(item.count, data.overview.visitors)}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 w-10 text-right">{item.count}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No data yet</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Funnel Tab */}
-      {activeTab === 'funnel' && (
-        <div className="space-y-6">
-          {/* Visual Funnel */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-6">Conversion Funnel</h2>
-            <div className="grid grid-cols-5 gap-4">
+          {/* Tabs */}
+          <div className="border-b border-slate-200">
+            <nav className="flex gap-6">
               {[
-                { label: 'Visitors', value: funnelData.visitors, color: 'bg-slate-300' },
-                { label: 'Form Opens', value: funnelData.formOpens, color: 'bg-blue-300' },
-                { label: 'Step 1 Done', value: funnelData.step1, color: 'bg-blue-400' },
-                { label: 'Step 2 Done', value: funnelData.step2, color: 'bg-blue-500' },
-                { label: 'Booked', value: funnelData.bookings, color: 'bg-green-500' },
-              ].map((step, index) => (
-                <div key={step.label} className="text-center">
-                  <div className={`h-32 ${step.color} rounded-lg flex items-end justify-center mb-2 relative overflow-hidden`}>
-                    <div 
-                      className="bg-primary-600 w-full absolute bottom-0 transition-all"
-                      style={{ 
-                        height: `${getPercentage(step.value, funnelData.visitors)}%`,
-                        minHeight: step.value > 0 ? '8px' : '0'
-                      }}
-                    />
-                  </div>
-                  <div className="text-2xl font-bold text-slate-900">{step.value}</div>
-                  <div className="text-xs text-slate-500">{step.label}</div>
-                  {index > 0 && (
-                    <div className="text-xs text-slate-400 mt-1">
-                      {getPercentage(step.value, funnelData.visitors)}% of visitors
-                    </div>
-                  )}
-                </div>
+                { key: 'overview', label: 'Overview' },
+                { key: 'traffic', label: 'Traffic' },
+                { key: 'funnel', label: 'Funnel' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                  className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab.key
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
               ))}
-            </div>
+            </nav>
           </div>
 
-          {/* Drop-off Analysis */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Step-by-Step Drop-off</h3>
-              <div className="space-y-4">
-                {[
-                  { from: 'Visitors', to: 'Form Open', fromVal: funnelData.visitors, toVal: funnelData.formOpens },
-                  { from: 'Form Open', to: 'Step 1', fromVal: funnelData.formOpens, toVal: funnelData.step1 },
-                  { from: 'Step 1', to: 'Step 2', fromVal: funnelData.step1, toVal: funnelData.step2 },
-                  { from: 'Step 2', to: 'Booked', fromVal: funnelData.step2, toVal: funnelData.bookings },
-                ].map((item, index) => {
-                  const dropoff = item.fromVal - item.toVal;
-                  const dropoffRate = item.fromVal > 0 ? Math.round((dropoff / item.fromVal) * 100) : 0;
-                  return (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div className="text-sm">
-                        <span className="text-slate-600">{item.from}</span>
-                        <span className="mx-2 text-slate-400">→</span>
-                        <span className="text-slate-900 font-medium">{item.to}</span>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-medium text-red-600">-{dropoff} ({dropoffRate}%)</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold uppercase text-slate-500 mb-4">Form Abandonment by Step</h3>
-              {data?.funnel.abandonment && data.funnel.abandonment.length > 0 ? (
+          {/* Tab Content */}
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Additional metrics */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Visitor Breakdown</h3>
                 <div className="space-y-3">
-                  {data.funnel.abandonment.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                      <span className="text-sm text-slate-700">Abandoned at Step {item.step}</span>
-                      <span className="text-sm font-medium text-red-600">{item.count} users</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">New Visitors</span>
+                    <span className="font-medium">{data.overview.current.newVisitors.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Returning Visitors</span>
+                    <span className="font-medium">{data.overview.current.returningVisitors.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Sessions</span>
+                    <span className="font-medium">{data.overview.current.sessions.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Page Views</span>
+                    <span className="font-medium">{data.overview.current.pageViews.toLocaleString()}</span>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-slate-500 text-sm">No abandonment data yet</p>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Booking Locations */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Booking Locations</h2>
-            <p className="text-sm text-slate-500 mb-4">Where your converted customers are located</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Countries (Bookings)</h3>
-                {data?.bookingLocations?.countries && data.bookingLocations.countries.length > 0 ? (
-                  <div className="space-y-2">
-                    {data.bookingLocations.countries.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded">
-                        <span className="text-sm text-slate-700">{item.country || 'Unknown'}</span>
-                        <span className="text-sm font-semibold text-green-700">{item.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-sm">No booking data yet</p>
-                )}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Cities (Bookings)</h3>
-                {data?.bookingLocations?.cities && data.bookingLocations.cities.length > 0 ? (
-                  <div className="space-y-2">
-                    {data.bookingLocations.cities.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded">
-                        <span className="text-sm text-slate-700">
-                          {item.city || 'Unknown'}{item.country ? `, ${item.country}` : ''}
-                        </span>
-                        <span className="text-sm font-semibold text-green-700">{item.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-sm">No booking data yet</p>
-                )}
-              </div>
-            </div>
-          </div>
+              <BreakdownTable
+                title="Top Countries"
+                data={data.locations.countries}
+                labelKey="country"
+                total={data.overview.current.visitors}
+              />
 
-          {/* Form Open Locations */}
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Form Open Locations</h2>
-            <p className="text-sm text-slate-500 mb-4">Where visitors who opened the form are located (unique visitors)</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Countries (Form Opens)</h3>
-                {data?.formOpenLocations?.countries && data.formOpenLocations.countries.length > 0 ? (
-                  <div className="space-y-2">
-                    {data.formOpenLocations.countries.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                        <span className="text-sm text-slate-700">{item.country || 'Unknown'}</span>
-                        <span className="text-sm font-semibold text-blue-700">{item.count}</span>
-                      </div>
-                    ))}
+              <BreakdownTable
+                title="Top Cities"
+                data={data.locations.cities}
+                labelKey="city"
+                total={data.overview.current.visitors}
+              />
+
+              <BreakdownTable
+                title="Devices"
+                data={data.devices.types}
+                labelKey="device"
+                total={data.overview.current.visitors}
+              />
+
+              <BreakdownTable
+                title="Browsers"
+                data={data.devices.browsers}
+                labelKey="browser"
+                total={data.overview.current.visitors}
+              />
+
+              <FunnelChart
+                visitors={data.overview.current.visitors}
+                formOpens={data.overview.current.formOpens}
+                steps={data.funnel.steps}
+                bookings={data.overview.current.bookings}
+              />
+            </div>
+          )}
+
+          {activeTab === 'traffic' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <BreakdownTable
+                title="Traffic Sources (UTM)"
+                data={data.traffic.sources}
+                labelKey="source"
+                total={data.overview.current.visitors}
+              />
+
+              <BreakdownTable
+                title="Top Referrers"
+                data={data.traffic.referrers}
+                labelKey="referrer"
+                total={data.overview.current.visitors}
+              />
+
+              <BreakdownTable
+                title="Top Landing Pages"
+                data={data.traffic.landingPages}
+                labelKey="page"
+                total={data.overview.current.visitors}
+              />
+            </div>
+          )}
+
+          {activeTab === 'funnel' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <FunnelChart
+                visitors={data.overview.current.visitors}
+                formOpens={data.overview.current.formOpens}
+                steps={data.funnel.steps}
+                bookings={data.overview.current.bookings}
+              />
+
+              <div className="bg-white rounded-lg border border-slate-200 p-4">
+                <h3 className="text-sm font-semibold text-slate-900 mb-4">Funnel Metrics</h3>
+                <div className="space-y-4">
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-sm text-slate-600">Visitor → Form Open Rate</div>
+                    <div className="text-xl font-bold text-slate-900">
+                      {data.overview.current.visitors > 0
+                        ? ((data.overview.current.formOpens / data.overview.current.visitors) * 100).toFixed(1)
+                        : 0}%
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-slate-500 text-sm">No form open data yet</p>
-                )}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold uppercase text-slate-500 mb-3">Top Cities (Form Opens)</h3>
-                {data?.formOpenLocations?.cities && data.formOpenLocations.cities.length > 0 ? (
-                  <div className="space-y-2">
-                    {data.formOpenLocations.cities.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                        <span className="text-sm text-slate-700">
-                          {item.city || 'Unknown'}{item.country ? `, ${item.country}` : ''}
-                        </span>
-                        <span className="text-sm font-semibold text-blue-700">{item.count}</span>
-                      </div>
-                    ))}
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-sm text-slate-600">Form Open → Booking Rate</div>
+                    <div className="text-xl font-bold text-slate-900">
+                      {data.overview.current.formOpens > 0
+                        ? ((data.overview.current.bookings / data.overview.current.formOpens) * 100).toFixed(1)
+                        : 0}%
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-slate-500 text-sm">No form open data yet</p>
-                )}
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <div className="text-sm text-green-600">Overall Conversion Rate</div>
+                    <div className="text-xl font-bold text-green-700">
+                      {data.overview.current.conversionRate.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+
+          {/* Compare hint */}
+          {compare && data.overview.previous && (
+            <div className="text-center text-sm text-slate-500">
+              Comparing to previous period: {new Date(data.period.previousStartDate || '').toLocaleDateString()} - {new Date(data.period.previousEndDate || '').toLocaleDateString()}
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

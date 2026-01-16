@@ -1,8 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { sql, gte, and, eq, desc, gt } from 'drizzle-orm';
+import { sql, gte, lte, and, eq, desc, gt, between } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
+
+// Helper function to get date string
+function toDateStr(date: Date): string {
+  return date.toISOString();
+}
+
+// Helper function to calculate metrics for a date range
+async function getMetricsForRange(
+  db: ReturnType<typeof drizzle>,
+  startDate: string,
+  endDate: string
+) {
+  const [
+    totalVisitors,
+    totalSessions,
+    totalPageViews,
+    totalFormOpens,
+    totalBookings,
+    newVisitors,
+    returningVisitors,
+  ] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.visitors)
+      .where(and(gte(schema.visitors.createdAt, startDate), lte(schema.visitors.createdAt, endDate))),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.sessions)
+      .where(and(gte(schema.sessions.startedAt, startDate), lte(schema.sessions.startedAt, endDate))),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.pageViews)
+      .where(and(gte(schema.pageViews.timestamp, startDate), lte(schema.pageViews.timestamp, endDate))),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.formEvents)
+      .where(and(
+        eq(schema.formEvents.eventType, 'form_opened'),
+        gte(schema.formEvents.timestamp, startDate),
+        lte(schema.formEvents.timestamp, endDate)
+      )),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.bookings)
+      .where(and(gte(schema.bookings.createdAt, startDate), lte(schema.bookings.createdAt, endDate))),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.visitors)
+      .where(and(
+        gte(schema.visitors.createdAt, startDate),
+        lte(schema.visitors.createdAt, endDate),
+        eq(schema.visitors.totalVisits, 1)
+      )),
+
+    db.select({ count: sql<number>`count(*)` })
+      .from(schema.visitors)
+      .where(and(
+        gte(schema.visitors.createdAt, startDate),
+        lte(schema.visitors.createdAt, endDate),
+        gt(schema.visitors.totalVisits, 1)
+      )),
+  ]);
+
+  const visitorsCount = totalVisitors[0]?.count || 0;
+  const bookingsCount = totalBookings[0]?.count || 0;
+  const formOpensCount = totalFormOpens[0]?.count || 0;
+
+  return {
+    visitors: visitorsCount,
+    sessions: totalSessions[0]?.count || 0,
+    pageViews: totalPageViews[0]?.count || 0,
+    formOpens: formOpensCount,
+    bookings: bookingsCount,
+    conversionRate: visitorsCount > 0 ? (bookingsCount / visitorsCount) * 100 : 0,
+    formConversionRate: formOpensCount > 0 ? (bookingsCount / formOpensCount) * 100 : 0,
+    newVisitors: newVisitors[0]?.count || 0,
+    returningVisitors: returningVisitors[0]?.count || 0,
+  };
+}
+
+// Helper to get daily trend data
+async function getDailyTrend(
+  db: ReturnType<typeof drizzle>,
+  startDate: string,
+  endDate: string
+) {
+  // Get visitors by day
+  const visitorsByDay = await db.select({
+    date: sql<string>`date(${schema.visitors.createdAt})`,
+    count: sql<number>`count(*)`,
+  })
+    .from(schema.visitors)
+    .where(and(gte(schema.visitors.createdAt, startDate), lte(schema.visitors.createdAt, endDate)))
+    .groupBy(sql`date(${schema.visitors.createdAt})`)
+    .orderBy(sql`date(${schema.visitors.createdAt})`);
+
+  // Get form opens by day
+  const formOpensByDay = await db.select({
+    date: sql<string>`date(${schema.formEvents.timestamp})`,
+    count: sql<number>`count(*)`,
+  })
+    .from(schema.formEvents)
+    .where(and(
+      eq(schema.formEvents.eventType, 'form_opened'),
+      gte(schema.formEvents.timestamp, startDate),
+      lte(schema.formEvents.timestamp, endDate)
+    ))
+    .groupBy(sql`date(${schema.formEvents.timestamp})`)
+    .orderBy(sql`date(${schema.formEvents.timestamp})`);
+
+  // Get bookings by day
+  const bookingsByDay = await db.select({
+    date: sql<string>`date(${schema.bookings.createdAt})`,
+    count: sql<number>`count(*)`,
+  })
+    .from(schema.bookings)
+    .where(and(gte(schema.bookings.createdAt, startDate), lte(schema.bookings.createdAt, endDate)))
+    .groupBy(sql`date(${schema.bookings.createdAt})`)
+    .orderBy(sql`date(${schema.bookings.createdAt})`);
+
+  // Merge all data into a single array with all dates
+  const dateMap = new Map<string, { date: string; visitors: number; formOpens: number; bookings: number }>();
+  
+  // Fill with all dates in range
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0];
+    dateMap.set(dateStr, { date: dateStr, visitors: 0, formOpens: 0, bookings: 0 });
+  }
+
+  // Fill in actual data
+  for (const row of visitorsByDay) {
+    const entry = dateMap.get(row.date);
+    if (entry) entry.visitors = row.count;
+  }
+  for (const row of formOpensByDay) {
+    const entry = dateMap.get(row.date);
+    if (entry) entry.formOpens = row.count;
+  }
+  for (const row of bookingsByDay) {
+    const entry = dateMap.get(row.date);
+    if (entry) entry.bookings = row.count;
+  }
+
+  return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Calculate percentage change
+function calcChange(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? 100 : null;
+  return ((current - previous) / previous) * 100;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,149 +173,126 @@ export async function GET(request: NextRequest) {
     const db = drizzle(env.DB, { schema });
     const { searchParams } = new URL(request.url);
 
-    // Date range (default last 30 days)
-    const days = parseInt(searchParams.get('days') || '30', 10);
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startDateStr = startDate.toISOString();
+    // Parse date range params
+    const preset = searchParams.get('preset') || 'last30';
+    const customStart = searchParams.get('startDate');
+    const customEnd = searchParams.get('endDate');
+    const compare = searchParams.get('compare') === 'true';
 
-    // =============================================
-    // CORE METRICS
-    // =============================================
-    const [
-      totalVisitors,
-      totalSessions,
-      totalPageViews,
-      totalFormOpens,
-      totalBookings,
-      newVisitors,
-      returningVisitors,
-    ] = await Promise.all([
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.visitors)
-        .where(gte(schema.visitors.createdAt, startDateStr)),
+    // Calculate date ranges based on preset or custom dates
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
 
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.sessions)
-        .where(gte(schema.sessions.startedAt, startDateStr)),
+    switch (preset) {
+      case 'today':
+        startDate = new Date(now);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'yesterday':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'last7':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'last30':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 29);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'last90':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 89);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'thisMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'lastMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        break;
+      case 'thisQuarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        break;
+      case 'thisYear':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'allTime':
+        startDate = new Date('2020-01-01');
+        break;
+      case 'custom':
+        startDate = customStart ? new Date(customStart) : new Date(now.setDate(now.getDate() - 29));
+        startDate.setHours(0, 0, 0, 0);
+        if (customEnd) {
+          endDate = new Date(customEnd);
+          endDate.setHours(23, 59, 59, 999);
+        }
+        break;
+      default:
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 29);
+        startDate.setHours(0, 0, 0, 0);
+    }
 
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.pageViews)
-        .where(gte(schema.pageViews.timestamp, startDateStr)),
+    const startDateStr = toDateStr(startDate);
+    const endDateStr = toDateStr(endDate);
 
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.formEvents)
-        .where(and(
-          eq(schema.formEvents.eventType, 'form_opened'),
-          gte(schema.formEvents.timestamp, startDateStr)
-        )),
+    // Calculate previous period for comparison
+    const periodLength = endDate.getTime() - startDate.getTime();
+    const prevEndDate = new Date(startDate.getTime() - 1);
+    const prevStartDate = new Date(prevEndDate.getTime() - periodLength);
+    const prevStartDateStr = toDateStr(prevStartDate);
+    const prevEndDateStr = toDateStr(prevEndDate);
 
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.bookings)
-        .where(gte(schema.bookings.createdAt, startDateStr)),
+    // Get current period metrics
+    const currentMetrics = await getMetricsForRange(db, startDateStr, endDateStr);
 
-      // New visitors (total_visits = 1)
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          eq(schema.visitors.totalVisits, 1)
-        )),
+    // Get previous period metrics if comparison enabled
+    let previousMetrics = null;
+    let changes = null;
+    if (compare) {
+      previousMetrics = await getMetricsForRange(db, prevStartDateStr, prevEndDateStr);
+      changes = {
+        visitors: calcChange(currentMetrics.visitors, previousMetrics.visitors),
+        sessions: calcChange(currentMetrics.sessions, previousMetrics.sessions),
+        pageViews: calcChange(currentMetrics.pageViews, previousMetrics.pageViews),
+        formOpens: calcChange(currentMetrics.formOpens, previousMetrics.formOpens),
+        bookings: calcChange(currentMetrics.bookings, previousMetrics.bookings),
+        conversionRate: currentMetrics.conversionRate - previousMetrics.conversionRate, // pp change
+      };
+    }
 
-      // Returning visitors (total_visits > 1)
-      db.select({ count: sql<number>`count(*)` })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          gt(schema.visitors.totalVisits, 1)
-        )),
-    ]);
+    // Get daily trend data
+    const trend = await getDailyTrend(db, startDateStr, endDateStr);
 
-    // =============================================
-    // ENGAGEMENT METRICS
-    // =============================================
-    const [
-      avgSessionDuration,
-      avgPagesPerSession,
-      avgTimeOnSite,
-      avgScrollDepth,
-    ] = await Promise.all([
-      // Average session duration
-      db.select({ avg: sql<number>`AVG(${schema.sessions.duration})` })
-        .from(schema.sessions)
-        .where(and(
-          gte(schema.sessions.startedAt, startDateStr),
-          sql`${schema.sessions.duration} IS NOT NULL`
-        )),
-
-      // Average pages per session
-      db.select({ avg: sql<number>`AVG(${schema.sessions.pageCount})` })
-        .from(schema.sessions)
-        .where(gte(schema.sessions.startedAt, startDateStr)),
-
-      // Average time on site
-      db.select({ avg: sql<number>`AVG(${schema.visitors.totalTimeOnSite})` })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          sql`${schema.visitors.totalTimeOnSite} > 0`
-        )),
-
-      // Average scroll depth
-      db.select({ avg: sql<number>`AVG(${schema.pageViews.scrollDepth})` })
-        .from(schema.pageViews)
-        .where(and(
-          gte(schema.pageViews.timestamp, startDateStr),
-          sql`${schema.pageViews.scrollDepth} IS NOT NULL`
-        )),
-    ]);
-
-    // =============================================
-    // TRAFFIC & ATTRIBUTION
-    // =============================================
+    // Get breakdown data for current period
     const [
       trafficSources,
-      utmMediums,
-      utmCampaigns,
       topReferrers,
       topLandingPages,
+      deviceBreakdown,
+      browserBreakdown,
+      countryBreakdown,
+      cityBreakdown,
+      funnelSteps,
     ] = await Promise.all([
-      // Traffic sources (utm_source)
+      // Traffic sources
       db.select({
         source: schema.visitors.utmSource,
         count: sql<number>`count(*)`,
       })
         .from(schema.visitors)
-        .where(gte(schema.visitors.createdAt, startDateStr))
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr)))
         .groupBy(schema.visitors.utmSource)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
-
-      // UTM Mediums
-      db.select({
-        medium: schema.visitors.utmMedium,
-        count: sql<number>`count(*)`,
-      })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          sql`${schema.visitors.utmMedium} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.utmMedium)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
-
-      // UTM Campaigns
-      db.select({
-        campaign: schema.visitors.utmCampaign,
-        count: sql<number>`count(*)`,
-      })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          sql`${schema.visitors.utmCampaign} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.utmCampaign)
         .orderBy(desc(sql`count(*)`))
         .limit(10),
 
@@ -175,6 +304,7 @@ export async function GET(request: NextRequest) {
         .from(schema.visitors)
         .where(and(
           gte(schema.visitors.createdAt, startDateStr),
+          lte(schema.visitors.createdAt, endDateStr),
           sql`${schema.visitors.referrer} IS NOT NULL AND ${schema.visitors.referrer} != ''`
         ))
         .groupBy(schema.visitors.referrer)
@@ -189,30 +319,20 @@ export async function GET(request: NextRequest) {
         .from(schema.visitors)
         .where(and(
           gte(schema.visitors.createdAt, startDateStr),
+          lte(schema.visitors.createdAt, endDateStr),
           sql`${schema.visitors.landingPage} IS NOT NULL`
         ))
         .groupBy(schema.visitors.landingPage)
         .orderBy(desc(sql`count(*)`))
         .limit(10),
-    ]);
 
-    // =============================================
-    // DEVICE & LOCATION BREAKDOWNS
-    // =============================================
-    const [
-      deviceBreakdown,
-      browserBreakdown,
-      osBreakdown,
-      countryBreakdown,
-      cityBreakdown,
-    ] = await Promise.all([
       // Device type
       db.select({
         device: schema.visitors.deviceType,
         count: sql<number>`count(*)`,
       })
         .from(schema.visitors)
-        .where(gte(schema.visitors.createdAt, startDateStr))
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr)))
         .groupBy(schema.visitors.deviceType)
         .orderBy(desc(sql`count(*)`)),
 
@@ -224,23 +344,10 @@ export async function GET(request: NextRequest) {
         .from(schema.visitors)
         .where(and(
           gte(schema.visitors.createdAt, startDateStr),
+          lte(schema.visitors.createdAt, endDateStr),
           sql`${schema.visitors.browser} IS NOT NULL`
         ))
         .groupBy(schema.visitors.browser)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
-
-      // Operating System
-      db.select({
-        os: schema.visitors.os,
-        count: sql<number>`count(*)`,
-      })
-        .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          sql`${schema.visitors.os} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.os)
         .orderBy(desc(sql`count(*)`))
         .limit(10),
 
@@ -252,6 +359,7 @@ export async function GET(request: NextRequest) {
         .from(schema.visitors)
         .where(and(
           gte(schema.visitors.createdAt, startDateStr),
+          lte(schema.visitors.createdAt, endDateStr),
           sql`${schema.visitors.country} IS NOT NULL`
         ))
         .groupBy(schema.visitors.country)
@@ -267,20 +375,13 @@ export async function GET(request: NextRequest) {
         .from(schema.visitors)
         .where(and(
           gte(schema.visitors.createdAt, startDateStr),
+          lte(schema.visitors.createdAt, endDateStr),
           sql`${schema.visitors.city} IS NOT NULL`
         ))
         .groupBy(schema.visitors.city, schema.visitors.country)
         .orderBy(desc(sql`count(*)`))
         .limit(10),
-    ]);
 
-    // =============================================
-    // CONVERSION FUNNEL & FORM ANALYTICS
-    // =============================================
-    const [
-      funnelSteps,
-      formAbandonment,
-    ] = await Promise.all([
       // Funnel steps
       db.select({
         step: schema.formEvents.step,
@@ -288,158 +389,39 @@ export async function GET(request: NextRequest) {
         count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
       })
         .from(schema.formEvents)
-        .where(gte(schema.formEvents.timestamp, startDateStr))
+        .where(and(gte(schema.formEvents.timestamp, startDateStr), lte(schema.formEvents.timestamp, endDateStr)))
         .groupBy(schema.formEvents.step, schema.formEvents.eventType)
         .orderBy(schema.formEvents.step),
-
-      // Form abandonment by step
-      db.select({
-        step: schema.formEvents.step,
-        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
-      })
-        .from(schema.formEvents)
-        .where(and(
-          eq(schema.formEvents.eventType, 'form_abandoned'),
-          gte(schema.formEvents.timestamp, startDateStr)
-        ))
-        .groupBy(schema.formEvents.step)
-        .orderBy(schema.formEvents.step),
     ]);
-
-    // =============================================
-    // BOOKING LOCATIONS (people who converted)
-    // =============================================
-    const [
-      bookingCountries,
-      bookingCities,
-    ] = await Promise.all([
-      // Countries of people who booked
-      db.select({
-        country: schema.visitors.country,
-        count: sql<number>`count(*)`,
-      })
-        .from(schema.bookings)
-        .innerJoin(schema.visitors, eq(schema.bookings.visitorId, schema.visitors.id))
-        .where(and(
-          gte(schema.bookings.createdAt, startDateStr),
-          sql`${schema.visitors.country} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.country)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
-
-      // Cities of people who booked
-      db.select({
-        city: schema.visitors.city,
-        country: schema.visitors.country,
-        count: sql<number>`count(*)`,
-      })
-        .from(schema.bookings)
-        .innerJoin(schema.visitors, eq(schema.bookings.visitorId, schema.visitors.id))
-        .where(and(
-          gte(schema.bookings.createdAt, startDateStr),
-          sql`${schema.visitors.city} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.city, schema.visitors.country)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
-    ]);
-
-    // =============================================
-    // FORM OPEN LOCATIONS (unique visitors who opened form)
-    // =============================================
-    const [
-      formOpenCountries,
-      formOpenCities,
-    ] = await Promise.all([
-      // Countries of visitors who opened the form
-      db.select({
-        country: schema.visitors.country,
-        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
-      })
-        .from(schema.formEvents)
-        .innerJoin(schema.visitors, eq(schema.formEvents.visitorId, schema.visitors.id))
-        .where(and(
-          eq(schema.formEvents.eventType, 'form_opened'),
-          gte(schema.formEvents.timestamp, startDateStr),
-          sql`${schema.visitors.country} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.country)
-        .orderBy(desc(sql`count(DISTINCT ${schema.formEvents.visitorId})`))
-        .limit(10),
-
-      // Cities of visitors who opened the form
-      db.select({
-        city: schema.visitors.city,
-        country: schema.visitors.country,
-        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
-      })
-        .from(schema.formEvents)
-        .innerJoin(schema.visitors, eq(schema.formEvents.visitorId, schema.visitors.id))
-        .where(and(
-          eq(schema.formEvents.eventType, 'form_opened'),
-          gte(schema.formEvents.timestamp, startDateStr),
-          sql`${schema.visitors.city} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.city, schema.visitors.country)
-        .orderBy(desc(sql`count(DISTINCT ${schema.formEvents.visitorId})`))
-        .limit(10),
-    ]);
-
-    // =============================================
-    // RECENT ACTIVITY
-    // =============================================
-    const recentVisitors = await db.select()
-      .from(schema.visitors)
-      .orderBy(desc(schema.visitors.lastSeenAt))
-      .limit(10);
-
-    // =============================================
-    // CALCULATE DERIVED METRICS
-    // =============================================
-    const visitorsCount = totalVisitors[0]?.count || 0;
-    const bookingsCount = totalBookings[0]?.count || 0;
-    const formOpensCount = totalFormOpens[0]?.count || 0;
-    
-    const conversionRate = visitorsCount > 0 
-      ? ((bookingsCount / visitorsCount) * 100).toFixed(2) 
-      : '0.00';
-    
-    const formConversionRate = formOpensCount > 0
-      ? ((bookingsCount / formOpensCount) * 100).toFixed(2)
-      : '0.00';
 
     return NextResponse.json({
       success: true,
       data: {
+        // Period info
+        period: {
+          preset,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          previousStartDate: compare ? prevStartDateStr : null,
+          previousEndDate: compare ? prevEndDateStr : null,
+        },
+        // Core metrics with optional comparison
         overview: {
-          visitors: visitorsCount,
-          sessions: totalSessions[0]?.count || 0,
-          pageViews: totalPageViews[0]?.count || 0,
-          formOpens: formOpensCount,
-          bookings: bookingsCount,
-          conversionRate: parseFloat(conversionRate),
-          formConversionRate: parseFloat(formConversionRate),
-          newVisitors: newVisitors[0]?.count || 0,
-          returningVisitors: returningVisitors[0]?.count || 0,
+          current: currentMetrics,
+          previous: previousMetrics,
+          changes,
         },
-        engagement: {
-          avgSessionDuration: Math.round(avgSessionDuration[0]?.avg || 0),
-          avgPagesPerSession: parseFloat((avgPagesPerSession[0]?.avg || 0).toFixed(1)),
-          avgTimeOnSite: Math.round(avgTimeOnSite[0]?.avg || 0),
-          avgScrollDepth: Math.round(avgScrollDepth[0]?.avg || 0),
-        },
+        // Daily trend for charts
+        trend,
+        // Breakdowns
         traffic: {
           sources: trafficSources,
-          mediums: utmMediums,
-          campaigns: utmCampaigns,
           referrers: topReferrers,
           landingPages: topLandingPages,
         },
         devices: {
           types: deviceBreakdown,
           browsers: browserBreakdown,
-          operatingSystems: osBreakdown,
         },
         locations: {
           countries: countryBreakdown,
@@ -447,22 +429,7 @@ export async function GET(request: NextRequest) {
         },
         funnel: {
           steps: funnelSteps,
-          abandonment: formAbandonment,
         },
-        bookingLocations: {
-          countries: bookingCountries,
-          cities: bookingCities,
-        },
-        formOpenLocations: {
-          countries: formOpenCountries,
-          cities: formOpenCities,
-        },
-        recentVisitors,
-        dateRange: {
-          days,
-          from: startDateStr,
-          to: new Date().toISOString(),
-        }
       }
     });
 
