@@ -180,11 +180,51 @@
     }
   }
   
+  function isExternalReferrer(referrer) {
+    if (!referrer) return false;
+    try {
+      const referrerHost = new URL(referrer).hostname;
+      const currentHost = window.location.hostname;
+      // External if different domain and not a subdomain relationship
+      return referrerHost !== currentHost && 
+             !referrerHost.includes(currentHost) && 
+             !currentHost.includes(referrerHost);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isSchedulerPage() {
+    const path = window.location.pathname.toLowerCase();
+    return path.includes('/scheduler') || 
+           path.includes('/verification') || 
+           path.includes('/thank-you');
+  }
+
   function getLandingPage() {
     let landing = getItem('landing_page');
+    
+    // Only set landing page if:
+    // 1. No landing page stored yet AND
+    // 2. This is NOT a scheduler/internal page (unless it's truly the first page from external)
     if (!landing) {
-      landing = window.location.href;
-      setItem('landing_page', landing);
+      const referrer = document.referrer || '';
+      const isExternal = isExternalReferrer(referrer);
+      
+      // If coming from external source OR no referrer (direct visit), capture landing page
+      // But skip scheduler pages if user came from same site
+      if (isExternal || !referrer) {
+        // For scheduler pages, only capture if truly external
+        if (isSchedulerPage() && !isExternal) {
+          // Don't capture scheduler as landing page for internal navigation
+          return null;
+        }
+        landing = window.location.href;
+        setItem('landing_page', landing);
+      } else {
+        // Internal navigation - don't capture
+        return null;
+      }
     }
     return landing;
   }
@@ -195,27 +235,14 @@
     const currentReferrer = document.referrer || '';
     
     // Store first external referrer if not already stored
-    if (!firstReferrer && currentReferrer) {
-      // Check if referrer is external (different domain)
-      try {
-        const referrerHost = new URL(currentReferrer).hostname;
-        const currentHost = window.location.hostname;
-        
-        // Only store if it's from a different domain
-        if (referrerHost !== currentHost && !referrerHost.includes(currentHost) && !currentHost.includes(referrerHost)) {
-          firstReferrer = currentReferrer;
-          setItem('first_referrer', firstReferrer);
-        }
-      } catch (e) {
-        // If URL parsing fails, store it anyway
-        firstReferrer = currentReferrer;
-        setItem('first_referrer', firstReferrer);
-      }
+    if (!firstReferrer && currentReferrer && isExternalReferrer(currentReferrer)) {
+      firstReferrer = currentReferrer;
+      setItem('first_referrer', firstReferrer);
     }
     
     return {
       current: currentReferrer,
-      first: firstReferrer || currentReferrer || null
+      first: firstReferrer || null  // Return null if no external referrer, not current
     };
   }
 

@@ -78,21 +78,52 @@ export async function POST(request: NextRequest) {
       .where(eq(schema.visitors.id, event.visitorId))
       .get();
 
+    // Helper to check if URL is an internal scheduler/system page
+    const isInternalPage = (url: string | null): boolean => {
+      if (!url) return false;
+      const path = url.toLowerCase();
+      return path.includes('/scheduler') || 
+             path.includes('/verification') || 
+             path.includes('/thank-you') ||
+             path.includes('/admin');
+    };
+
     if (!visitor) {
       // Create new visitor
       const deviceData = event.data.device || {};
       const utmData = event.data.firstTouchUtm || event.data.utm || {};
       
+      // Don't use scheduler/internal pages as landing page
+      let landingPage = event.data.landingPage || event.data.url || null;
+      if (isInternalPage(landingPage)) {
+        landingPage = null; // Will be filled in later when they visit a real page
+      }
+      
+      // Only store external referrer
+      let referrer = event.data.referrer || null;
+      if (referrer) {
+        try {
+          const referrerHost = new URL(referrer).hostname;
+          const currentHost = event.data.url ? new URL(event.data.url).hostname : '';
+          // If referrer is same domain, don't store it
+          if (referrerHost === currentHost || referrerHost.includes(currentHost) || currentHost.includes(referrerHost)) {
+            referrer = null;
+          }
+        } catch (e) {
+          // Keep referrer if URL parsing fails
+        }
+      }
+      
       visitor = {
         id: event.visitorId,
         fingerprint: event.fingerprint,
-        referrer: event.data.referrer || null,
+        referrer: referrer,
         utmSource: utmData.source || null,
         utmMedium: utmData.medium || null,
         utmCampaign: utmData.campaign || null,
         utmTerm: utmData.term || null,
         utmContent: utmData.content || null,
-        landingPage: event.data.landingPage || event.data.url || null,
+        landingPage: landingPage,
         userAgent: deviceData.userAgent || null,
         deviceType: deviceData.deviceType || null,
         browser: deviceData.browser || null,
@@ -116,13 +147,37 @@ export async function POST(request: NextRequest) {
 
       await db.insert(schema.visitors).values(visitor);
     } else {
-      // Update existing visitor
+      // Update existing visitor - but also backfill missing attribution
+      const updates: Record<string, unknown> = {
+        lastSeenAt: now,
+        totalVisits: (visitor.totalVisits || 0) + (event.isNewSession ? 1 : 0),
+      };
+      
+      // Backfill landing page if missing and current page is NOT internal
+      if (!visitor.landingPage && event.data.landingPage && !isInternalPage(event.data.landingPage)) {
+        updates.landingPage = event.data.landingPage;
+      }
+      
+      // Backfill referrer if missing and we have an external referrer
+      if (!visitor.referrer && event.data.referrer) {
+        try {
+          const referrerHost = new URL(event.data.referrer).hostname;
+          const currentHost = event.data.url ? new URL(event.data.url).hostname : '';
+          if (referrerHost !== currentHost && !referrerHost.includes(currentHost) && !currentHost.includes(referrerHost)) {
+            updates.referrer = event.data.referrer;
+          }
+        } catch (e) {}
+      }
+      
+      // Backfill UTM if missing
+      const utmData = event.data.firstTouchUtm || event.data.utm || {};
+      if (!visitor.utmSource && utmData.source) updates.utmSource = utmData.source;
+      if (!visitor.utmMedium && utmData.medium) updates.utmMedium = utmData.medium;
+      if (!visitor.utmCampaign && utmData.campaign) updates.utmCampaign = utmData.campaign;
+      
       await db
         .update(schema.visitors)
-        .set({
-          lastSeenAt: now,
-          totalVisits: (visitor.totalVisits || 0) + (event.isNewSession ? 1 : 0),
-        })
+        .set(updates)
         .where(eq(schema.visitors.id, event.visitorId));
     }
 
