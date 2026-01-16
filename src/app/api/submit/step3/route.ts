@@ -28,14 +28,25 @@ export async function POST(request: NextRequest) {
     const db = drizzle(env.DB, { schema });
     const now = new Date().toISOString();
 
-    // Check if test mode
+    // Check if test mode - DB setting takes precedence over env var
     const testModeSetting = await db
       .select()
       .from(schema.settings)
       .where(eq(schema.settings.key, 'test_mode'))
       .get();
 
-    const isTestMode = testModeSetting?.value === 'true' || env.TEST_MODE === 'true';
+    // If DB setting exists, use it; otherwise fall back to env var
+    const isTestMode = testModeSetting 
+      ? testModeSetting.value === 'true'
+      : env.TEST_MODE === 'true';
+    
+    if (env.DEBUG_LOGGING === 'true') {
+      console.log('Test mode check (step3):', {
+        dbSetting: testModeSetting?.value,
+        envVar: env.TEST_MODE,
+        effectiveTestMode: isTestMode,
+      });
+    }
 
     // Get visitor attribution data
     let attribution: {

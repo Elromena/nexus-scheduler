@@ -24,14 +24,25 @@ export async function POST(request: NextRequest) {
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
 
-    // Check if test mode
+    // Check if test mode - DB setting takes precedence over env var
     const testModeSetting = await db
       .select()
       .from(schema.settings)
       .where(eq(schema.settings.key, 'test_mode'))
       .get();
 
-    const isTestMode = testModeSetting?.value === 'true' || env.TEST_MODE === 'true';
+    // If DB setting exists, use it; otherwise fall back to env var
+    const isTestMode = testModeSetting 
+      ? testModeSetting.value === 'true'
+      : env.TEST_MODE === 'true';
+    
+    if (env.DEBUG_LOGGING === 'true') {
+      console.log('Test mode check (step2):', {
+        dbSetting: testModeSetting?.value,
+        envVar: env.TEST_MODE,
+        effectiveTestMode: isTestMode,
+      });
+    }
 
     // Update HubSpot contact
     if (!isTestMode && env.HUBSPOT_ACCESS_TOKEN && hubspotId && !hubspotId.startsWith('test-')) {

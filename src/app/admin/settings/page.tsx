@@ -8,8 +8,10 @@ function DebugSection() {
   const [debugData, setDebugData] = useState<{
     summary: {
       testMode: boolean;
+      testModeSource: 'database' | 'environment';
       envTestMode: boolean;
       dbTestMode: boolean;
+      dbTestModeExists: boolean;
       hubspotConfigured: boolean;
       googleConfigured: boolean;
       debugLogging: boolean;
@@ -115,6 +117,12 @@ function DebugSection() {
               <div className="font-medium">Test Mode</div>
               <div className={debugData.summary.testMode ? 'text-amber-700' : 'text-green-700'}>
                 {debugData.summary.testMode ? 'ON (integrations disabled)' : 'OFF (live)'}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Source: {debugData.summary.testModeSource === 'database' ? 'Settings toggle' : 'Env var'}
+                {debugData.summary.testModeSource === 'database' && (
+                  <span className="ml-1">(overrides env)</span>
+                )}
               </div>
             </div>
             <div className={`p-3 rounded-lg text-sm ${debugData.summary.hubspotConfigured ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
@@ -379,26 +387,38 @@ export default function SettingsPage() {
         ) : (
           <div className="space-y-6">
             {/* Test Mode Toggle */}
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-              <div>
-                <div className="font-semibold text-slate-900">Test Mode</div>
-                <p className="text-sm text-slate-600 mt-1">
-                  When enabled, bookings skip HubSpot and Google Calendar integrations. 
-                  Use this for testing the scheduler without creating real records.
-                </p>
-              </div>
-              <button
-                onClick={() => setTestMode(!testMode)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  testMode ? 'bg-amber-500' : 'bg-slate-300'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    testMode ? 'translate-x-6' : 'translate-x-1'
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-slate-900">Test Mode</div>
+                  <p className="text-sm text-slate-600 mt-1">
+                    When enabled, bookings skip HubSpot and Google Calendar integrations. 
+                    Use this for testing the scheduler without creating real records.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTestMode(!testMode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    testMode ? 'bg-amber-500' : 'bg-slate-300'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      testMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className={`mt-2 text-xs px-2 py-1 rounded inline-block ${
+                testMode 
+                  ? 'bg-amber-100 text-amber-700' 
+                  : 'bg-green-100 text-green-700'
+              }`}>
+                {testMode ? 'Test mode ON - integrations disabled' : 'Live mode - integrations active'}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                This setting overrides the TEST_MODE environment variable. Remember to click "Save Changes" after toggling.
+              </p>
             </div>
 
             {/* Calendar Slots */}
