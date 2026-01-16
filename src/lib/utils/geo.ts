@@ -13,15 +13,62 @@ export interface GeoData {
 
 /**
  * Extract geolocation data from Cloudflare request headers
+ * Cloudflare Workers on Webflow Cloud should provide these headers
  */
-export function getGeoFromHeaders(headers: Headers): GeoData {
+export function getGeoFromHeaders(headers: Headers, debug = false): GeoData {
+  // Try multiple header variations (Cloudflare, Vercel, standard)
+  const countryCode = 
+    headers.get('cf-ipcountry') || 
+    headers.get('CF-IPCountry') ||
+    headers.get('x-vercel-ip-country') || 
+    headers.get('x-country-code') ||
+    null;
+    
+  const city = 
+    headers.get('cf-ipcity') || 
+    headers.get('CF-IPCity') ||
+    headers.get('x-vercel-ip-city') || 
+    headers.get('x-city') ||
+    null;
+    
+  const region = 
+    headers.get('cf-region') || 
+    headers.get('cf-region-code') ||
+    headers.get('CF-Region') ||
+    headers.get('x-vercel-ip-country-region') || 
+    null;
+    
+  const timezone = 
+    headers.get('cf-timezone') || 
+    headers.get('CF-Timezone') ||
+    headers.get('x-vercel-ip-timezone') ||
+    null;
+    
+  const ip = 
+    headers.get('cf-connecting-ip') || 
+    headers.get('CF-Connecting-IP') ||
+    headers.get('x-real-ip') ||
+    headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+    null;
+
+  if (debug) {
+    console.log('Geo headers debug:', {
+      countryCode,
+      city,
+      region,
+      timezone,
+      ip,
+      allHeaders: Object.fromEntries(headers.entries()),
+    });
+  }
+
   return {
-    country: headers.get('cf-ipcountry') || headers.get('x-vercel-ip-country') || null,
-    countryCode: headers.get('cf-ipcountry') || null,
-    city: headers.get('cf-ipcity') || headers.get('x-vercel-ip-city') || null,
-    region: headers.get('cf-region') || headers.get('x-vercel-ip-country-region') || null,
-    timezone: headers.get('cf-timezone') || null,
-    ip: headers.get('cf-connecting-ip') || headers.get('x-forwarded-for')?.split(',')[0] || null,
+    country: countryCode, // Raw country code, will be converted by getCountryName
+    countryCode,
+    city,
+    region,
+    timezone,
+    ip,
   };
 }
 

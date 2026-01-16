@@ -37,8 +37,18 @@ export async function POST(request: NextRequest) {
     }
     
     // Get geo data from Cloudflare headers
-    const geo = getGeoFromHeaders(request.headers);
+    const debugMode = env.DEBUG_LOGGING === 'true';
+    const geo = getGeoFromHeaders(request.headers, debugMode);
     const now = new Date().toISOString();
+    
+    if (debugMode) {
+      console.log('Geo detection:', {
+        countryCode: geo.countryCode,
+        country: getCountryName(geo.countryCode),
+        city: geo.city,
+        region: geo.region,
+      });
+    }
 
     // Check if visitor exists
     let visitor = await db
