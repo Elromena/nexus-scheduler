@@ -123,15 +123,25 @@ function BreakdownTable({
   countKey?: string;
   total: number;
 }) {
-  const truncateUrl = (url: string) => {
-    if (!url) return '(direct)';
+  // Format URL for display - referrers show domain, pages show path
+  const formatUrl = (url: string, isReferrer: boolean) => {
+    if (!url) return isReferrer ? '(direct)' : '/';
     try {
       const parsed = new URL(url);
-      return parsed.pathname.length > 30 
-        ? parsed.pathname.slice(0, 30) + '...' 
-        : parsed.pathname || '/';
+      if (isReferrer) {
+        // For referrers, show the domain (optionally with path if meaningful)
+        const domain = parsed.hostname.replace('www.', '');
+        const path = parsed.pathname !== '/' ? parsed.pathname : '';
+        const fullRef = domain + path;
+        return fullRef.length > 35 ? fullRef.slice(0, 35) + '...' : fullRef;
+      } else {
+        // For landing pages, show the path
+        const path = parsed.pathname || '/';
+        return path.length > 35 ? path.slice(0, 35) + '...' : path;
+      }
     } catch {
-      return url.length > 40 ? url.slice(0, 40) + '...' : url;
+      // Not a valid URL, just truncate
+      return url.length > 35 ? url.slice(0, 35) + '...' : url;
     }
   };
 
@@ -146,9 +156,9 @@ function BreakdownTable({
             const label = String(item[labelKey] || '(none)');
             const count = Number(item[countKey] || 0);
             const percentage = total > 0 ? (count / total) * 100 : 0;
-            const displayLabel = labelKey.includes('page') || labelKey.includes('referrer') 
-              ? truncateUrl(label) 
-              : label;
+            const isReferrer = labelKey.includes('referrer');
+            const isUrl = isReferrer || labelKey.includes('page');
+            const displayLabel = isUrl ? formatUrl(label, isReferrer) : label;
 
             return (
               <div key={idx}>
