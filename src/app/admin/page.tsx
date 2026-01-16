@@ -53,7 +53,11 @@ export default function AdminDashboard() {
       // Trigger HubSpot sync in the background
       fetch('/scheduler/api/hubspot/sync', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ backfill: true }) // Trigger a deeper sync on dashboard load
       }).catch(err => console.error('Silent sync error:', err));
 
       const response = await fetch(`/scheduler/api/analytics?days=${days}`, {

@@ -154,14 +154,25 @@ Then add to **Footer Code** (Site Settings → Custom Code):
   s.defer = true;
   document.head.appendChild(s);
 
-  // Listen for height updates from iframe
+  // Listen for messages from iframe
   window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'nexus-scheduler-height') {
+    if (!e.data) return;
+
+    // Handle height updates
+    if (e.data.type === 'nexus-scheduler-height') {
       const iframe = document.getElementById('nexus-scheduler-iframe');
       if (iframe) {
-        // Set iframe height directly, with max based on viewport
         const newHeight = Math.min(e.data.height + 20, window.innerHeight - 100);
         iframe.style.height = newHeight + 'px';
+      }
+    }
+
+    // Handle modal close request
+    if (e.data.type === 'nexus-scheduler-close' || e.data === 'close-modal') {
+      const modal = document.getElementById('nexus-modal');
+      if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
       }
     }
   });

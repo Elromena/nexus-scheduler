@@ -253,6 +253,32 @@ export default function SettingsPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // HubSpot Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleSyncHubSpot = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/hubspot/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ backfill: true })
+      });
+      const result = await response.json();
+      setSyncResult({ success: result.success, message: result.message || 'Sync completed' });
+    } catch (err) {
+      setSyncResult({ success: false, message: 'Sync failed' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Reset state
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -713,6 +739,47 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* HubSpot Integration Management */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">HubSpot Integration</h2>
+          <button 
+            onClick={handleSyncHubSpot}
+            disabled={syncing}
+            className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+              syncing ? 'bg-slate-100 text-slate-400' : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
+            }`}
+          >
+            {syncing ? (
+              <><span className="spinner border-slate-400 border-t-transparent w-4 h-4" /> Syncing...</>
+            ) : (
+              'Verify & Sync HubSpot'
+            )}
+          </button>
+        </div>
+        
+        {syncResult && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            syncResult.success 
+              ? 'bg-green-50 border border-green-200 text-green-700' 
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            {syncResult.message}
+          </div>
+        )}
+
+        <div className="space-y-3 text-sm">
+          <p className="text-slate-600">
+            This tool will scan your HubSpot account for existing deals matching your leads and sync their stages.
+          </p>
+          <ul className="list-disc list-inside text-slate-500 space-y-1">
+            <li>Finds missing Deal IDs by matching lead emails</li>
+            <li>Updates all deal stages from HubSpot</li>
+            <li>Connects existing meetings to their HubSpot timeline</li>
+          </ul>
+        </div>
+      </div>
+
       {/* Setup Instructions */}
       <div className="bg-white rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Setup Instructions</h2>
@@ -740,6 +807,25 @@ export default function SettingsPage() {
   s.src = \`\${schedulerBase}/scheduler/tracker.js\`;
   s.defer = true;
   document.head.appendChild(s);
+
+  // Listen for messages from iframe
+  window.addEventListener('message', function(e) {
+    if (!e.data) return;
+    if (e.data.type === 'nexus-scheduler-height') {
+      const iframe = document.getElementById('nexus-scheduler-iframe');
+      if (iframe) {
+        const newHeight = Math.min(e.data.height + 20, window.innerHeight - 100);
+        iframe.style.height = newHeight + 'px';
+      }
+    }
+    if (e.data.type === 'nexus-scheduler-close' || e.data === 'close-modal') {
+      const modal = document.getElementById('nexus-modal');
+      if (modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+      }
+    }
+  });
 
   // Modal trigger - add class "nexus-trigger-btn" to any button
   document.querySelectorAll('.nexus-trigger-btn').forEach(btn => {
