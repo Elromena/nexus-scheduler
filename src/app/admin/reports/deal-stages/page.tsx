@@ -13,8 +13,15 @@ interface ReportData {
   change: { value: number; direction: 'up' | 'down' | 'same' };
 }
 
+interface MonthlyBreakdownItem {
+  month: string;
+  dealStage: string | null;
+  count: number;
+}
+
 export default function DealStagesReportPage() {
   const [data, setData] = useState<ReportData[]>([]);
+  const [monthlyBreakdown, setMonthlyBreakdown] = useState<MonthlyBreakdownItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -68,6 +75,7 @@ export default function DealStagesReportPage() {
 
       const result = await response.json();
       setData(result.data || []);
+      setMonthlyBreakdown(result.monthlyBreakdown || []);
       setPagination(result.pagination || { page: 1, totalPages: 1, total: 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
@@ -205,6 +213,8 @@ export default function DealStagesReportPage() {
         pagination={pagination}
         onPageChange={setPage}
         onExport={handleExport}
+        monthlyBreakdown={monthlyBreakdown}
+        itemKey="dealStage"
       />
 
       {/* Info box */}
