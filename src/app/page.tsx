@@ -87,6 +87,40 @@ export default function SchedulerPage() {
     }
   }, []);
 
+  // Send height to parent iframe when content changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.parent === window) return; // Not in iframe
+
+    const sendHeight = () => {
+      const card = document.querySelector('.scheduler-card');
+      if (card) {
+        const height = card.scrollHeight;
+        window.parent.postMessage(
+          { type: 'nexus-scheduler-height', height },
+          '*'
+        );
+      }
+    };
+
+    // Send initial height after a short delay for render
+    const timeout = setTimeout(sendHeight, 100);
+
+    // Observe size changes
+    const card = document.querySelector('.scheduler-card');
+    let observer: ResizeObserver | null = null;
+    
+    if (card && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(sendHeight);
+      observer.observe(card);
+    }
+
+    return () => {
+      clearTimeout(timeout);
+      if (observer) observer.disconnect();
+    };
+  }, [step]); // Re-run when step changes
+
   const updateFormData = (data: Partial<FormData>) => {
     setFormData(prev => ({ ...prev, ...data }));
   };
