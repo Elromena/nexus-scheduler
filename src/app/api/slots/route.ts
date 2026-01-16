@@ -63,8 +63,6 @@ export async function POST(request: NextRequest) {
     const dateObj = new Date(year, month - 1, day);
     const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
-    console.log(`Checking availability for: ${date} (Day of week: ${dayOfWeek}, Available: ${calendarConfig.availableDays.join(',')})`);
-
     // Check if day is available
     if (!calendarConfig.availableDays.includes(dayOfWeek)) {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -119,8 +117,6 @@ export async function POST(request: NextRequest) {
       allSlots = generateSlotsFromBusinessHours(calendarConfig);
     }
     
-    console.log(`Slots: Using ${usingCustomSlots ? 'custom slots' : 'business hours'} (${allSlots.length} slots)`)
-
     // If in test mode, return mock available slots
     if (isTestMode) {
       const availableSlots = allSlots.filter((_, index) => index % 2 === 0 || index % 3 === 0);

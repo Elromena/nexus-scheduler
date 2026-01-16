@@ -7,18 +7,9 @@ import * as schema from '@/lib/db/schema';
 import { sendEmail, generateVerificationEmailHTML, generateCode } from '@/lib/integrations/resend';
 
 export async function POST(request: NextRequest) {
-  const { env } = getCloudflareContext();
-  const debug = env.DEBUG_LOGGING === 'true';
-  
   try {
     const body = await request.json();
     const { email } = body;
-
-    console.log(`MANAGE: Send code request for email: ${email}`);
-
-    if (debug) {
-      console.log('Send code request:', { email: email?.substring(0, 3) + '***' });
-    }
 
     if (!email || !email.includes('@')) {
       return NextResponse.json(
@@ -27,15 +18,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
 
     // Check if email has any upcoming bookings
     const now = new Date().toISOString();
     const todayDate = now.split('T')[0];
-    
-    if (debug) {
-      console.log('Checking bookings:', { email: email.toLowerCase(), todayDate });
-    }
     
     const bookings = await db
       .select()
@@ -49,16 +37,9 @@ export async function POST(request: NextRequest) {
         )
       ));
 
-    if (debug) {
-      console.log('Found bookings:', { count: bookings.length, bookings: bookings.map(b => ({ id: b.id, date: b.scheduledDate, status: b.status })) });
-    }
-
     if (bookings.length === 0) {
       // Don't reveal if email exists or not for security
       // But still return success to prevent email enumeration
-      if (debug) {
-        console.log('No upcoming bookings found for email');
-      }
       return NextResponse.json({
         success: true,
         message: 'If you have upcoming bookings, you will receive a verification code.',
@@ -79,15 +60,9 @@ export async function POST(request: NextRequest) {
         ));
     } catch (tableError) {
       // Table might not exist yet - that's OK, continue
-      if (debug) {
-        console.log('verification_codes table check:', tableError);
-      }
     }
 
     if (recentCodes.length >= 3) {
-      if (debug) {
-        console.log('Rate limit hit:', { recentCodes: recentCodes.length });
-      }
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please try again later.' },
         { status: 429 }
@@ -98,10 +73,6 @@ export async function POST(request: NextRequest) {
     const code = generateCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
-    if (debug) {
-      console.log('Generated code, storing in DB...');
-    }
-
     // Store code in database
     try {
       await db.insert(schema.verificationCodes).values({
@@ -111,8 +82,7 @@ export async function POST(request: NextRequest) {
         expiresAt,
       });
     } catch (insertError) {
-      console.error('Failed to store verification code (table may not exist):', insertError);
-      // Continue anyway - we'll still try to send the email
+      console.error('Failed to store verification code:', insertError);
     }
 
     // Send email via Resend
@@ -125,19 +95,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (debug) {
-      console.log('Sending email via Resend...');
-    }
-
     const emailResult = await sendEmail(resendApiKey, {
       to: email,
       subject: 'Your Blockchain-Ads Verification Code',
       html: generateVerificationEmailHTML(code),
     });
-
-    if (debug) {
-      console.log('Resend result:', emailResult);
-    }
 
     if (!emailResult.success) {
       console.error('Failed to send verification email:', emailResult.error);

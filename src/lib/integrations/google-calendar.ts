@@ -203,12 +203,6 @@ export class GoogleCalendarClient {
     try {
       const events = await this.listEvents(date);
       
-      console.log(`Google Calendar Events for ${date}:`, JSON.stringify(events.map(e => ({
-        summary: e.summary,
-        start: e.start.dateTime,
-        end: e.end.dateTime
-      }))));
-
       // Extract busy times from events
       const busyTimes = new Set<string>();
       for (const event of events) {
@@ -216,53 +210,8 @@ export class GoogleCalendarClient {
           const startTime = new Date(event.start.dateTime);
           const endTime = new Date(event.end.dateTime);
           
-          console.log(`Busy event: ${event.summary} (${startTime.toISOString()} - ${endTime.toISOString()})`);
-
           // Block all slots that fall within this event's duration
           for (const slot of allSlots) {
-            // Create a date object for this slot in the host's timezone
-            // Note: date is YYYY-MM-DD, slot is HH:MM
-            const [hour, min] = slot.split(':').map(Number);
-            
-            // We need to compare this slot to the meeting time
-            // The best way is to construct a Date for the slot in the host's timezone
-            const slotDate = new Date(new Intl.DateTimeFormat('en-US', {
-              timeZone: hostTimezone,
-              year: 'numeric',
-              month: 'numeric',
-              day: 'numeric',
-              hour: 'numeric',
-              minute: 'numeric',
-              hour12: false
-            }).format(startTime)); // Use startTime just to get the base date
-            
-            // Set the hours/mins for the slot we're checking
-            const [y, m, d] = date.split('-').map(Number);
-            // Construct a Date that represents this slot in the host's local time
-            // and convert it to a universal timestamp for comparison
-            const slotTimestamp = new Date(new Intl.DateTimeFormat('en-US', {
-              timeZone: hostTimezone,
-            }).format(new Date(y, m - 1, d)));
-            
-            // Simpler approach: construct ISO string in host timezone and compare
-            // But JS Dates are hard. Let's use a robust method:
-            
-            // 1. Get slot start/end in UTC
-            const slotStart = new Date(`${date}T${slot}:00`); // Server local
-            // Actually, the easiest way is to use the hostTimezone offset
-            
-            // Create a formatter to see what time it is in host timezone for a given UTC date
-            const formatter = new Intl.DateTimeFormat('en-US', {
-              timeZone: hostTimezone,
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            });
-            
-            // Check if this event's time range covers this slot
-            // A slot is busy if the event starts before or at the slot time, 
-            // AND the event ends after the slot starts.
-            
             // Let's convert the event start/end to "HH:MM" in the host's timezone
             const eventStartLocal = new Intl.DateTimeFormat('en-GB', {
               timeZone: hostTimezone,
@@ -279,16 +228,13 @@ export class GoogleCalendarClient {
             // If the event spans across days, it's more complex, but for same-day:
             if (slot >= eventStartLocal && slot < eventEndLocal) {
               busyTimes.add(slot);
-              console.log(`Blocking slot: ${slot} because of event ${event.summary} (${eventStartLocal}-${eventEndLocal})`);
             }
           }
         }
       }
 
       // Filter out busy slots
-      const available = allSlots.filter(slot => !busyTimes.has(slot));
-      console.log(`Final available slots: ${available.length}/${allSlots.length}`);
-      return available;
+      return allSlots.filter(slot => !busyTimes.has(slot));
     } catch (error) {
       console.error('Error getting availability:', error);
       // Return all slots if there's an error (fail open)

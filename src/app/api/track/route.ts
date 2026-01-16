@@ -24,18 +24,6 @@ export async function POST(request: NextRequest) {
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
 
-    if (env.DEBUG_LOGGING === 'true') {
-      console.log('track_event', {
-        event: event.event,
-        visitorId: event.visitorId,
-        sessionId: event.sessionId,
-        url: event.data.url,
-        referrer: event.data.referrer,
-        utm: event.data.utm,
-        firstTouchUtm: event.data.firstTouchUtm,
-      });
-    }
-    
     // Get geo data from Cloudflare headers
     const debugMode = env.DEBUG_LOGGING === 'true';
     const geo = getGeoFromHeaders(request.headers, debugMode);
@@ -60,17 +48,6 @@ export async function POST(request: NextRequest) {
       geo.timezone = clientTimezone;
     }
     
-    if (debugMode) {
-      console.log('Geo detection:', {
-        countryCode: geo.countryCode,
-        country: getCountryName(geo.countryCode),
-        city: geo.city,
-        region: geo.region,
-        timezone: geo.timezone,
-        clientTimezone,
-      });
-    }
-
     // Check if visitor exists
     let visitor = await db
       .select()
@@ -193,7 +170,6 @@ export async function POST(request: NextRequest) {
         .get();
 
       if (!existingSession) {
-        if (debugMode) console.log('Creating new session:', event.sessionId);
         await db.insert(schema.sessions).values({
           id: event.sessionId,
           visitorId: event.visitorId,
@@ -205,8 +181,6 @@ export async function POST(request: NextRequest) {
           utmMedium: utmData.medium || null,
           utmCampaign: utmData.campaign || null,
         });
-      } else {
-        if (debugMode) console.log('Session already exists, skipping create:', event.sessionId);
       }
     } else {
       // Update session

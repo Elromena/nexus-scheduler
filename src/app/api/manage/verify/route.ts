@@ -9,8 +9,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, code } = body;
 
-    console.log(`MANAGE VERIFY: Attempt for email: ${email}`);
-
     if (!email || !code) {
       return NextResponse.json(
         { success: false, error: 'Email and code are required' },
@@ -36,7 +34,6 @@ export async function POST(request: NextRequest) {
       .get();
 
     if (!verificationCode) {
-      console.log(`MANAGE VERIFY: Invalid/expired code for ${email}`);
       return NextResponse.json(
         { success: false, error: 'Invalid or expired code' },
         { status: 400 }
@@ -48,8 +45,6 @@ export async function POST(request: NextRequest) {
       .update(schema.verificationCodes)
       .set({ usedAt: now })
       .where(eq(schema.verificationCodes.id, verificationCode.id));
-
-    console.log(`MANAGE VERIFY: Code verified for ${email}. Fetching bookings...`);
 
     // Get upcoming bookings for this email
     const bookings = await db
@@ -75,8 +70,6 @@ export async function POST(request: NextRequest) {
         )
       ))
       .orderBy(schema.bookings.scheduledDate);
-
-    console.log(`MANAGE VERIFY: Found ${bookings.length} upcoming bookings for ${email}`);
 
     // Generate a session token for subsequent requests
     const sessionToken = Buffer.from(`${email.toLowerCase()}:${Date.now()}`).toString('base64');
