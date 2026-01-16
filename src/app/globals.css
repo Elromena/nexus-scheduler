@@ -35,7 +35,8 @@ body {
 
 body.embedded-scheduler {
   background: transparent !important;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto; /* Allow vertical scroll when content is tall */
 }
 
 /* =========================================
@@ -52,9 +53,11 @@ body.embedded-scheduler .scheduler-container {
   min-height: 100dvh; /* Dynamic viewport height for mobile */
   padding: 16px;
   display: flex;
-  align-items: center !important;
+  align-items: flex-start !important; /* Start from top to allow scroll */
   justify-content: center !important;
   background: transparent !important;
+  padding-top: 24px;
+  padding-bottom: 24px;
 }
 
 .scheduler-card {
@@ -332,11 +335,12 @@ body.embedded-scheduler .scheduler-card {
     padding-bottom: 24px;
   }
   
-  /* Keep centering for embedded scheduler on mobile */
+  /* Mobile embedded scheduler - allow content to flow naturally */
   body.embedded-scheduler .scheduler-container {
-    align-items: center !important;
+    align-items: flex-start !important;
     padding-top: 16px;
-    padding-bottom: 16px;
+    padding-bottom: 32px; /* Extra padding at bottom for buttons */
+    min-height: auto; /* Let content determine height */
   }
   
   .scheduler-card {
@@ -346,7 +350,8 @@ body.embedded-scheduler .scheduler-card {
   body.embedded-scheduler .scheduler-card {
     padding: 1.5rem;
     max-width: 100%;
-    border-radius: 0;
+    border-radius: 12px; /* Keep rounded corners on mobile */
+    margin: 0 8px; /* Small margin on sides */
   }
   
   .admin-sidebar {

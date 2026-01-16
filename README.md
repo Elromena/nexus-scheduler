@@ -149,14 +149,32 @@ document.querySelectorAll('.nexus-trigger-btn').forEach(btn => {
     const overlay = document.createElement('div');
     overlay.id = 'nexus-modal';
     overlay.innerHTML = `
-      <div style="position:fixed;inset:0;background:rgba(255,255,255,0.95);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;">
-        <div style="position:relative;width:100%;max-width:700px;height:90vh;max-height:700px;background:#fff;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.12);overflow:hidden;">
-          <button onclick="this.closest('#nexus-modal').remove()" style="position:absolute;top:15px;right:20px;width:32px;height:32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:50%;font-size:20px;cursor:pointer;z-index:10;">&times;</button>
-          <iframe src="/scheduler" style="width:100%;height:100%;border:none;"></iframe>
+      <div id="nexus-overlay" style="position:fixed;inset:0;background:rgba(255,255,255,0.95);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+        <div id="nexus-modal-container" style="position:relative;width:100%;max-width:650px;min-height:400px;background:#fff;border-radius:12px;box-shadow:0 25px 60px rgba(0,0,0,0.12);margin:auto;">
+          <button onclick="this.closest('#nexus-modal').remove()" style="position:absolute;top:12px;right:12px;width:32px;height:32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:50%;font-size:20px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;">&times;</button>
+          <iframe id="nexus-iframe" src="/scheduler" style="width:100%;height:600px;border:none;border-radius:12px;"></iframe>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+    
+    // Handle close
+    overlay.querySelector('#nexus-overlay').addEventListener('click', function(e) {
+      if (e.target === this) overlay.remove();
+    });
+    overlay.addEventListener('remove', () => document.body.style.overflow = '');
+    
+    // Listen for height updates from iframe
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'nexus-scheduler-height') {
+        const iframe = document.getElementById('nexus-iframe');
+        if (iframe) {
+          const newHeight = Math.min(e.data.height + 40, window.innerHeight - 60);
+          iframe.style.height = newHeight + 'px';
+        }
+      }
+    });
   });
 });
 </script>
