@@ -60,6 +60,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Enforce 2-day rule (Must be at least 2 days after original date)
+    const originalDate = new Date(booking.scheduledDate + 'T00:00:00');
+    const requestedDate = new Date(newDate + 'T00:00:00');
+    const minDate = new Date(originalDate);
+    minDate.setDate(originalDate.getDate() + 2);
+
+    if (requestedDate < minDate) {
+      return NextResponse.json(
+        { success: false, error: 'Rescheduling requires at least 48 hours notice from the original date.' },
+        { status: 400 }
+      );
+    }
+
     // Get host timezone and email
     const hostTimezoneSetting = await db
       .select()

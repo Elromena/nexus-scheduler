@@ -227,11 +227,25 @@ export default function ManageBookingPage() {
     return `${hour12}:${minutes} ${ampm}`;
   };
 
-  // Get minimum date (tomorrow)
+  // Get minimum date (Original date + 2 days OR Tomorrow, whichever is later)
   const getMinDate = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const minFromToday = new Date(today);
+    minFromToday.setDate(today.getDate() + 1);
+
+    if (selectedBooking) {
+      const originalDate = new Date(selectedBooking.scheduledDate + 'T00:00:00');
+      const minFromOriginal = new Date(originalDate);
+      minFromOriginal.setDate(originalDate.getDate() + 2);
+      
+      // Return the later of the two dates
+      const finalMin = minFromOriginal > minFromToday ? minFromOriginal : minFromToday;
+      return finalMin.toISOString().split('T')[0];
+    }
+    
+    return minFromToday.toISOString().split('T')[0];
   };
 
   return (

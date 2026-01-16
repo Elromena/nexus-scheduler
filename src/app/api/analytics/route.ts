@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { sql, gte, lte, and, eq, desc, gt, between } from 'drizzle-orm';
+import { sql, gte, lte, and, eq, desc, gt, isNotNull, ne } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 // Helper function to get date string
@@ -174,7 +174,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // Parse date range params
-    const preset = searchParams.get('preset') || 'last30';
+    let preset = searchParams.get('preset') || 'last30';
+    const daysParam = searchParams.get('days');
+    if (daysParam) {
+      preset = `last${daysParam}`;
+    }
+    
     const customStart = searchParams.get('startDate');
     const customEnd = searchParams.get('endDate');
     const compare = searchParams.get('compare') === 'true';
@@ -219,13 +224,6 @@ export async function GET(request: NextRequest) {
         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
         break;
-      case 'thisQuarter':
-        const quarter = Math.floor(now.getMonth() / 3);
-        startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        break;
-      case 'thisYear':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
       case 'allTime':
         startDate = new Date('2020-01-01');
         break;
@@ -246,36 +244,12 @@ export async function GET(request: NextRequest) {
     const startDateStr = toDateStr(startDate);
     const endDateStr = toDateStr(endDate);
 
-    // Calculate previous period for comparison
-    const periodLength = endDate.getTime() - startDate.getTime();
-    const prevEndDate = new Date(startDate.getTime() - 1);
-    const prevStartDate = new Date(prevEndDate.getTime() - periodLength);
-    const prevStartDateStr = toDateStr(prevStartDate);
-    const prevEndDateStr = toDateStr(prevEndDate);
-
     // Get current period metrics
     const currentMetrics = await getMetricsForRange(db, startDateStr, endDateStr);
 
-    // Get previous period metrics if comparison enabled
-    let previousMetrics = null;
-    let changes = null;
-    if (compare) {
-      previousMetrics = await getMetricsForRange(db, prevStartDateStr, prevEndDateStr);
-      changes = {
-        visitors: calcChange(currentMetrics.visitors, previousMetrics.visitors),
-        sessions: calcChange(currentMetrics.sessions, previousMetrics.sessions),
-        pageViews: calcChange(currentMetrics.pageViews, previousMetrics.pageViews),
-        formOpens: calcChange(currentMetrics.formOpens, previousMetrics.formOpens),
-        bookings: calcChange(currentMetrics.bookings, previousMetrics.bookings),
-        conversionRate: currentMetrics.conversionRate - previousMetrics.conversionRate, // pp change
-      };
-    }
-
-    // Get daily trend data
-    const trend = await getDailyTrend(db, startDateStr, endDateStr);
-
-    // Get breakdown data for current period
+    // Get trend, funnel, and breakdowns
     const [
+      trend,
       trafficSources,
       topReferrers,
       topLandingPages,
@@ -284,152 +258,102 @@ export async function GET(request: NextRequest) {
       countryBreakdown,
       cityBreakdown,
       funnelSteps,
+      recentActivity,
+      pipeline,
+      hotLeads,
     ] = await Promise.all([
-      // Traffic sources
-      db.select({
-        source: schema.visitors.utmSource,
-        count: sql<number>`count(*)`,
-      })
+      getDailyTrend(db, startDateStr, endDateStr),
+      
+      db.select({ source: schema.visitors.utmSource, count: sql<number>`count(*)` })
         .from(schema.visitors)
         .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr)))
-        .groupBy(schema.visitors.utmSource)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .groupBy(schema.visitors.utmSource).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // Top referrers
-      db.select({
-        referrer: schema.visitors.referrer,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ referrer: schema.visitors.referrer, count: sql<number>`count(*)` })
         .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          lte(schema.visitors.createdAt, endDateStr),
-          sql`${schema.visitors.referrer} IS NOT NULL AND ${schema.visitors.referrer} != ''`
-        ))
-        .groupBy(schema.visitors.referrer)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr), isNotNull(schema.visitors.referrer), ne(schema.visitors.referrer, '')))
+        .groupBy(schema.visitors.referrer).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // Top landing pages
-      db.select({
-        page: schema.visitors.landingPage,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ page: schema.visitors.landingPage, count: sql<number>`count(*)` })
         .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          lte(schema.visitors.createdAt, endDateStr),
-          sql`${schema.visitors.landingPage} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.landingPage)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr), isNotNull(schema.visitors.landingPage)))
+        .groupBy(schema.visitors.landingPage).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // Device type
-      db.select({
-        device: schema.visitors.deviceType,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ device: schema.visitors.deviceType, count: sql<number>`count(*)` })
         .from(schema.visitors)
         .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr)))
-        .groupBy(schema.visitors.deviceType)
-        .orderBy(desc(sql`count(*)`)),
+        .groupBy(schema.visitors.deviceType).orderBy(desc(sql`count(*)`)),
 
-      // Browser
-      db.select({
-        browser: schema.visitors.browser,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ browser: schema.visitors.browser, count: sql<number>`count(*)` })
         .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          lte(schema.visitors.createdAt, endDateStr),
-          sql`${schema.visitors.browser} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.browser)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr), isNotNull(schema.visitors.browser)))
+        .groupBy(schema.visitors.browser).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // Country
-      db.select({
-        country: schema.visitors.country,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ country: schema.visitors.country, count: sql<number>`count(*)` })
         .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          lte(schema.visitors.createdAt, endDateStr),
-          sql`${schema.visitors.country} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.country)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr), isNotNull(schema.visitors.country)))
+        .groupBy(schema.visitors.country).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // City
-      db.select({
-        city: schema.visitors.city,
-        country: schema.visitors.country,
-        count: sql<number>`count(*)`,
-      })
+      db.select({ city: schema.visitors.city, country: schema.visitors.country, count: sql<number>`count(*)` })
         .from(schema.visitors)
-        .where(and(
-          gte(schema.visitors.createdAt, startDateStr),
-          lte(schema.visitors.createdAt, endDateStr),
-          sql`${schema.visitors.city} IS NOT NULL`
-        ))
-        .groupBy(schema.visitors.city, schema.visitors.country)
-        .orderBy(desc(sql`count(*)`))
-        .limit(10),
+        .where(and(gte(schema.visitors.createdAt, startDateStr), lte(schema.visitors.createdAt, endDateStr), isNotNull(schema.visitors.city)))
+        .groupBy(schema.visitors.city, schema.visitors.country).orderBy(desc(sql`count(*)`)).limit(10),
 
-      // Funnel steps
-      db.select({
-        step: schema.formEvents.step,
-        eventType: schema.formEvents.eventType,
-        count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})`,
-      })
+      db.select({ step: schema.formEvents.step, eventType: schema.formEvents.eventType, count: sql<number>`count(DISTINCT ${schema.formEvents.visitorId})` })
         .from(schema.formEvents)
         .where(and(gte(schema.formEvents.timestamp, startDateStr), lte(schema.formEvents.timestamp, endDateStr)))
-        .groupBy(schema.formEvents.step, schema.formEvents.eventType)
-        .orderBy(schema.formEvents.step),
+        .groupBy(schema.formEvents.step, schema.formEvents.eventType).orderBy(schema.formEvents.step),
+
+      // DASHBOARD SPECIFIC: Recent Activity (last 20 events)
+      db.select({
+        id: schema.formEvents.id,
+        visitorId: schema.formEvents.visitorId,
+        eventType: schema.formEvents.eventType,
+        timestamp: schema.formEvents.timestamp,
+        metadata: schema.formEvents.metadata,
+      })
+        .from(schema.formEvents)
+        .orderBy(desc(schema.formEvents.timestamp))
+        .limit(20),
+
+      // DASHBOARD SPECIFIC: Pipeline Summary
+      db.select({
+        stage: schema.bookings.hubspotDealStage,
+        count: sql<number>`count(*)`
+      })
+        .from(schema.bookings)
+        .groupBy(schema.bookings.hubspotDealStage),
+
+      // DASHBOARD SPECIFIC: Hot Leads (Returning visitors with high engagement)
+      db.select({
+        id: schema.visitors.id,
+        country: schema.visitors.country,
+        totalVisits: schema.visitors.totalVisits,
+        lastSeenAt: schema.visitors.lastSeenAt,
+      })
+        .from(schema.visitors)
+        .where(gt(schema.visitors.totalVisits, 2))
+        .orderBy(desc(schema.visitors.lastSeenAt))
+        .limit(5)
     ]);
 
     return NextResponse.json({
       success: true,
       data: {
-        // Period info
-        period: {
-          preset,
-          startDate: startDateStr,
-          endDate: endDateStr,
-          previousStartDate: compare ? prevStartDateStr : null,
-          previousEndDate: compare ? prevEndDateStr : null,
-        },
-        // Core metrics with optional comparison
-        overview: {
-          current: currentMetrics,
-          previous: previousMetrics,
-          changes,
-        },
-        // Daily trend for charts
+        period: { preset, startDate: startDateStr, endDate: endDateStr },
+        overview: currentMetrics,
         trend,
-        // Breakdowns
-        traffic: {
-          sources: trafficSources,
-          referrers: topReferrers,
-          landingPages: topLandingPages,
-        },
-        devices: {
-          types: deviceBreakdown,
-          browsers: browserBreakdown,
-        },
-        locations: {
-          countries: countryBreakdown,
-          cities: cityBreakdown,
-        },
-        funnel: {
-          steps: funnelSteps,
-        },
+        traffic: { sources: trafficSources, referrers: topReferrers, landingPages: topLandingPages },
+        devices: { types: deviceBreakdown, browsers: browserBreakdown },
+        locations: { countries: countryBreakdown, cities: cityBreakdown },
+        funnel: { steps: funnelSteps },
+        // Dashboard extensions
+        recentActivity,
+        pipeline,
+        hotLeads,
+        // Legacy support for dashboard
+        recentVisitors: hotLeads, 
+        trafficSources: trafficSources,
       }
     });
 
