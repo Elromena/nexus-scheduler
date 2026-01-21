@@ -14,13 +14,6 @@ interface StepSuccessProps {
 }
 
 export default function StepSuccess({ formData, bookingResult }: StepSuccessProps) {
-  const closePortal = () => {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'nexus-scheduler-close' }, '*');
-      window.parent.postMessage('close-modal', '*');
-    }
-  };
-
   return (
     <div className="text-center animate-fade-in py-2">
       {/* Success icon */}
@@ -78,12 +71,12 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
           See Success Stories
         </a>
 
-        <button 
-          onClick={closePortal} 
-          className="w-full py-4 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98]"
+        <a
+          href="/scheduler/manage"
+          className="w-full py-4 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] flex items-center justify-center"
         >
-          Finish & Close
-        </button>
+          Manage my booking
+        </a>
         
         <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
           Need to change? Reschedule or cancel anytime from <br/>your confirmation email.
