@@ -197,7 +197,7 @@ export const verificationCodes = sqliteTable('verification_codes', {
 }, (table) => ({
   emailIdx: index('idx_verification_codes_email').on(table.email),
   codeIdx: index('idx_verification_codes_code').on(table.code),
-
+}));
 
 // Type exports
 export type Visitor = typeof visitors.$inferSelect;
