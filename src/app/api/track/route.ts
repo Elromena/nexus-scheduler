@@ -28,6 +28,22 @@ export async function POST(request: NextRequest) {
     const debugMode = env.DEBUG_LOGGING === 'true';
     const geo = getGeoFromHeaders(request.headers, debugMode);
     const now = new Date().toISOString();
+
+    if (debugMode) {
+      // Log minimal attribution fields to verify landing page capture (avoid PII beyond visitorId)
+      const data = event.data || {};
+      console.log('[track]', {
+        event: event.event,
+        visitorId: event.visitorId,
+        sessionId: event.sessionId,
+        isNewSession: event.isNewSession,
+        url: typeof data.url === 'string' ? data.url : null,
+        landingPage: typeof data.landingPage === 'string' ? data.landingPage : null,
+        referrer: typeof data.referrer === 'string' ? data.referrer : null,
+        currentReferrer: typeof (data as any).currentReferrer === 'string' ? (data as any).currentReferrer : null,
+        clientTimezone: typeof (data as any).clientTimezone === 'string' ? (data as any).clientTimezone : null,
+      });
+    }
     
     // Use client timezone as additional fallback for country detection
     const clientTimezone = typeof event.data?.clientTimezone === 'string' ? event.data.clientTimezone : null;
