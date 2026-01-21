@@ -159,6 +159,9 @@ export const bookings = sqliteTable('bookings', {
 
   // Test flag (set when booking created while test_mode is enabled)
   isTest: integer('is_test').default(0),
+
+  // Internal/team flag (exclude from analytics/reports without deleting)
+  excludedFromAnalytics: integer('excluded_from_analytics').default(0),
   
   // Attribution snapshot (denormalized)
   attributionSource: text('attribution_source'),

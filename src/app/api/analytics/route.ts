@@ -46,7 +46,11 @@ async function getMetricsForRange(
 
     db.select({ count: sql<number>`count(*)` })
       .from(schema.bookings)
-      .where(and(gte(schema.bookings.createdAt, startDate), lte(schema.bookings.createdAt, endDate))),
+      .where(and(
+        gte(schema.bookings.createdAt, startDate),
+        lte(schema.bookings.createdAt, endDate),
+        eq(schema.bookings.excludedFromAnalytics, 0)
+      )),
 
     db.select({ count: sql<number>`count(*)` })
       .from(schema.visitors)
@@ -118,7 +122,11 @@ async function getDailyTrend(
     count: sql<number>`count(*)`,
   })
     .from(schema.bookings)
-    .where(and(gte(schema.bookings.createdAt, startDate), lte(schema.bookings.createdAt, endDate)))
+    .where(and(
+      gte(schema.bookings.createdAt, startDate),
+      lte(schema.bookings.createdAt, endDate),
+      eq(schema.bookings.excludedFromAnalytics, 0)
+    ))
     .groupBy(sql`date(${schema.bookings.createdAt})`)
     .orderBy(sql`date(${schema.bookings.createdAt})`);
 
@@ -342,6 +350,7 @@ export async function GET(request: NextRequest) {
         count: sql<number>`count(*)`
       })
         .from(schema.bookings)
+        .where(eq(schema.bookings.excludedFromAnalytics, 0))
         .groupBy(schema.bookings.hubspotDealStage),
 
       // DASHBOARD SPECIFIC: Hot Leads (Returning visitors with high engagement)

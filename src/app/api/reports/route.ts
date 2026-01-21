@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { sql, gte, lte, and, desc } from 'drizzle-orm';
+import { sql, gte, lte, and, desc, eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 // Helper to get month string (YYYY-MM) from date
@@ -125,7 +125,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(
             sql`strftime('%Y-%m', ${schema.bookings.createdAt})`,
@@ -145,7 +146,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.bookings.attributionReferrer)
           .orderBy(desc(sql`count(*)`))
@@ -158,7 +160,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ));
 
         // Calculate MoM changes for each referrer
@@ -199,7 +202,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(
             sql`strftime('%Y-%m', ${schema.bookings.createdAt})`,
@@ -219,7 +223,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.bookings.attributionLandingPage)
           .orderBy(desc(sql`count(*)`))
@@ -231,7 +236,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ));
 
         const months = getLastNMonths(2);
@@ -270,7 +276,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(
             sql`strftime('%Y-%m', ${schema.bookings.createdAt})`,
@@ -289,7 +296,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.bookings.industry)
           .orderBy(desc(sql`count(*)`))
@@ -301,7 +309,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ));
 
         const months = getLastNMonths(2);
@@ -343,7 +352,8 @@ export async function GET(request: NextRequest) {
           .innerJoin(schema.visitors, sql`${schema.bookings.visitorId} = ${schema.visitors.id}`)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(
             sql`strftime('%Y-%m', ${schema.bookings.createdAt})`,
@@ -365,7 +375,8 @@ export async function GET(request: NextRequest) {
           .innerJoin(schema.visitors, sql`${schema.bookings.visitorId} = ${schema.visitors.id}`)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.visitors.country)
           .orderBy(desc(sql`count(*)`))
@@ -383,7 +394,8 @@ export async function GET(request: NextRequest) {
           .innerJoin(schema.visitors, sql`${schema.bookings.visitorId} = ${schema.visitors.id}`)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.visitors.city, schema.visitors.country)
           .orderBy(desc(sql`count(*)`))
@@ -396,7 +408,8 @@ export async function GET(request: NextRequest) {
           .innerJoin(schema.visitors, sql`${schema.bookings.visitorId} = ${schema.visitors.id}`)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ));
 
         return NextResponse.json({
@@ -427,7 +440,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(
             sql`strftime('%Y-%m', ${schema.bookings.createdAt})`,
@@ -446,7 +460,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(schema.bookings.hubspotDealStage)
           .orderBy(desc(sql`count(*)`))
@@ -458,7 +473,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ));
 
         const months = getLastNMonths(2);

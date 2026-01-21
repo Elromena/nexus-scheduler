@@ -307,6 +307,10 @@ export default function SettingsPage() {
   const [showDeleteTestConfirm, setShowDeleteTestConfirm] = useState(false);
   const [deletingTestBookings, setDeletingTestBookings] = useState(false);
   const [deleteTestMessage, setDeleteTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [excludeTeamInput, setExcludeTeamInput] = useState('');
+  const [excludePreview, setExcludePreview] = useState<{ totalMatched: number; sample: Array<{ id: string; email: string; createdAt: string | null; excluded: number | null }> } | null>(null);
+  const [excluding, setExcluding] = useState(false);
+  const [excludeMessage, setExcludeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -507,6 +511,72 @@ export default function SettingsPage() {
       });
     } finally {
       setDeletingTestBookings(false);
+    }
+  };
+
+  const parseEmailsAndDomains = (raw: string): { emails: string[]; domains: string[] } => {
+    const tokens = raw
+      .split(/[\n,\s]+/)
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    const emails: string[] = [];
+    const domains: string[] = [];
+    for (const t of tokens) {
+      const v = t.toLowerCase();
+      if (v.includes('@') && !v.startsWith('@')) emails.push(v);
+      else domains.push(v.replace(/^@/, ''));
+    }
+    return { emails: Array.from(new Set(emails)), domains: Array.from(new Set(domains)) };
+  };
+
+  const previewExcludeTeamBookings = async () => {
+    setExcluding(true);
+    setExcludeMessage(null);
+    setExcludePreview(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const { emails, domains } = parseEmailsAndDomains(excludeTeamInput);
+      const response = await fetch('/scheduler/api/bookings/exclude', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dryRun: true, emails, domains }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to preview');
+      setExcludePreview({ totalMatched: result.totalMatched || 0, sample: result.sample || [] });
+    } catch (err) {
+      setExcludeMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to preview' });
+    } finally {
+      setExcluding(false);
+    }
+  };
+
+  const applyExcludeTeamBookings = async () => {
+    setExcluding(true);
+    setExcludeMessage(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const { emails, domains } = parseEmailsAndDomains(excludeTeamInput);
+      const response = await fetch('/scheduler/api/bookings/exclude', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: 'EXCLUDE_INTERNAL_BOOKINGS', emails, domains }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to apply exclusion');
+      setExcludeMessage({ type: 'success', text: `Excluded ${result.updatedCount || 0} bookings from analytics.` });
+      setExcludePreview({ totalMatched: result.updatedCount || 0, sample: result.sample || [] });
+    } catch (err) {
+      setExcludeMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to apply exclusion' });
+    } finally {
+      setExcluding(false);
     }
   };
 
@@ -977,6 +1047,67 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <div className="bg-white rounded-lg border border-red-200 p-6">
         <h2 className="text-lg font-semibold text-red-700 mb-4">Danger Zone</h2>
+
+        {excludeMessage && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            excludeMessage.type === 'success'
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            {excludeMessage.text}
+          </div>
+        )}
+
+        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 mb-4">
+          <div className="font-semibold text-slate-900">Exclude Team Bookings from Analytics</div>
+          <p className="text-sm text-slate-600 mt-1 mb-3">
+            Paste your team emails and/or domains. These bookings will be hidden from analytics/reports (not deleted).
+          </p>
+          <textarea
+            value={excludeTeamInput}
+            onChange={(e) => setExcludeTeamInput(e.target.value)}
+            rows={3}
+            placeholder={`Examples:\nteam@blockchain-ads.com\n@blockchain-ads.com\njohn@yourcompany.com`}
+            className="form-input w-full"
+          />
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={previewExcludeTeamBookings}
+              disabled={excluding}
+              className="btn-outline"
+            >
+              {excluding ? 'Working...' : 'Preview'}
+            </button>
+            <button
+              type="button"
+              onClick={applyExcludeTeamBookings}
+              disabled={excluding}
+              className="btn-primary"
+            >
+              {excluding ? 'Working...' : 'Apply Exclusion'}
+            </button>
+          </div>
+
+          {excludePreview && (
+            <div className="mt-3 text-sm text-slate-700">
+              <div className="font-medium">Matched: {excludePreview.totalMatched}</div>
+              {excludePreview.sample?.length > 0 && (
+                <div className="mt-2 text-xs text-slate-600">
+                  Sample:
+                  <ul className="list-disc list-inside">
+                    {excludePreview.sample.slice(0, 5).map((b) => (
+                      <li key={b.id}>
+                        {b.email} ({b.createdAt?.split('T')[0] || 'unknown date'})
+                        {b.excluded ? ' — already excluded' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {deleteTestMessage && (
           <div className={`mb-4 p-3 rounded-lg text-sm ${
