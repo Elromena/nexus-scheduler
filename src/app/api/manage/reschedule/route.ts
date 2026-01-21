@@ -61,6 +61,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Booking must have a concrete slot to be rescheduled
+    if (!booking.scheduledDate || !booking.scheduledTime) {
+      return NextResponse.json(
+        { success: false, error: 'This booking does not have a scheduled time to reschedule.' },
+        { status: 400 }
+      );
+    }
+
     // Enforce 2-day rule (Must be at least 2 days after original date)
     const originalDate = new Date(booking.scheduledDate + 'T00:00:00');
     const requestedDate = new Date(newDate + 'T00:00:00');
@@ -115,6 +123,18 @@ export async function POST(request: NextRequest) {
 
     // Update slot lock first (this will fail if slot is already taken)
     const previousSlot = { date: booking.scheduledDate, time: booking.scheduledTime };
+
+    // Ensure slot lock exists for older bookings created before slot locks were introduced
+    try {
+      await db.insert(slotLocks).values({
+        id: bookingId,
+        scheduledDate: previousSlot.date,
+        scheduledTime: previousSlot.time,
+      });
+    } catch {
+      // already exists or table not present yet in environment; proceed
+    }
+
     try {
       await db
         .update(slotLocks)
