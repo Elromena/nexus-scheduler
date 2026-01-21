@@ -261,6 +261,7 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
         scheduledDate: validData.date,
         scheduledTime: validData.time,
         timezone: validData.timezone || null,
+        isTest: isTestMode ? 1 : 0,
         hubspotContactId: hubspotId || null,
         hubspotDealId: hubspotDealId,
         hubspotMeetingId: hubspotMeetingId,

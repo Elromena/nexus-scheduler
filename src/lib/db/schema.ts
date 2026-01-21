@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // =============================================
@@ -156,6 +156,9 @@ export const bookings = sqliteTable('bookings', {
   
   // Status
   status: text('status').default('pending'), // pending, confirmed, completed, cancelled, no_show
+
+  // Test flag (set when booking created while test_mode is enabled)
+  isTest: integer('is_test').default(0),
   
   // Attribution snapshot (denormalized)
   attributionSource: text('attribution_source'),
@@ -199,6 +202,19 @@ export const verificationCodes = sqliteTable('verification_codes', {
   codeIdx: index('idx_verification_codes_code').on(table.code),
 }));
 
+// =============================================
+// SLOT LOCKS TABLE
+// Prevent race-condition double bookings (unique date+time)
+// =============================================
+export const slotLocks = sqliteTable('slot_locks', {
+  id: text('id').primaryKey(), // bookingId (keeps 1:1 mapping)
+  scheduledDate: text('scheduled_date').notNull(),
+  scheduledTime: text('scheduled_time').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  slotUniqueIdx: index('uidx_slot_locks_date_time').on(table.scheduledDate, table.scheduledTime),
+}));
+
 // Type exports
 export type Visitor = typeof visitors.$inferSelect;
 export type NewVisitor = typeof visitors.$inferInsert;
@@ -214,3 +230,5 @@ export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
 export type VerificationCode = typeof verificationCodes.$inferSelect;
 export type NewVerificationCode = typeof verificationCodes.$inferInsert;
+export type SlotLock = typeof slotLocks.$inferSelect;
+export type NewSlotLock = typeof slotLocks.$inferInsert;

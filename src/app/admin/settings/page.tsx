@@ -303,6 +303,11 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Delete test bookings
+  const [showDeleteTestConfirm, setShowDeleteTestConfirm] = useState(false);
+  const [deletingTestBookings, setDeletingTestBookings] = useState(false);
+  const [deleteTestMessage, setDeleteTestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -468,6 +473,40 @@ export default function SettingsPage() {
       setResetMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to reset' });
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleDeleteTestBookings = async () => {
+    setDeletingTestBookings(true);
+    setDeleteTestMessage(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/scheduler/api/delete-test-bookings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: 'DELETE_TEST_BOOKINGS' }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete test bookings');
+      }
+
+      setDeleteTestMessage({
+        type: 'success',
+        text: `Deleted ${result.deletedCount || 0} test bookings.`,
+      });
+      setShowDeleteTestConfirm(false);
+    } catch (err) {
+      setDeleteTestMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to delete test bookings',
+      });
+    } finally {
+      setDeletingTestBookings(false);
     }
   };
 
@@ -938,6 +977,52 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <div className="bg-white rounded-lg border border-red-200 p-6">
         <h2 className="text-lg font-semibold text-red-700 mb-4">Danger Zone</h2>
+
+        {deleteTestMessage && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            deleteTestMessage.type === 'success'
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            {deleteTestMessage.text}
+          </div>
+        )}
+
+        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-slate-900">Delete Test Bookings</div>
+              <p className="text-sm text-slate-600 mt-1">
+                Removes bookings created while <strong>Test Mode</strong> was enabled (keeps visitors/sessions/page views).
+              </p>
+            </div>
+            {!showDeleteTestConfirm ? (
+              <button
+                onClick={() => setShowDeleteTestConfirm(true)}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700"
+              >
+                Delete Test Bookings
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowDeleteTestConfirm(false)}
+                  className="px-3 py-2 text-slate-600 text-sm"
+                  disabled={deletingTestBookings}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteTestBookings}
+                  disabled={deletingTestBookings}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {deletingTestBookings ? 'Deleting...' : 'Yes, Delete Test Bookings'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         
         {resetMessage && (
           <div className={`mb-4 p-3 rounded-lg text-sm ${
