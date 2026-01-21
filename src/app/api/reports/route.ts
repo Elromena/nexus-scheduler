@@ -94,7 +94,8 @@ export async function GET(request: NextRequest) {
           .from(schema.bookings)
           .where(and(
             gte(schema.bookings.createdAt, startDate),
-            lte(schema.bookings.createdAt, endDate)
+            lte(schema.bookings.createdAt, endDate),
+            eq(schema.bookings.excludedFromAnalytics, 0)
           ))
           .groupBy(sql`strftime('%Y-%m', ${schema.bookings.createdAt})`)
           .orderBy(desc(sql`strftime('%Y-%m', ${schema.bookings.createdAt})`));

@@ -218,44 +218,63 @@ const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Fallback timezones (used if browser cannot enumerate IANA zones)
-const COMMON_TIMEZONES = [
-  { value: 'America/New_York', label: 'Eastern Time (ET) - New York' },
-  { value: 'America/Chicago', label: 'Central Time (CT) - Chicago' },
-  { value: 'America/Denver', label: 'Mountain Time (MT) - Denver' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time (PT) - Los Angeles' },
-  { value: 'America/Anchorage', label: 'Alaska Time - Anchorage' },
-  { value: 'Pacific/Honolulu', label: 'Hawaii Time - Honolulu' },
-  { value: 'Europe/London', label: 'GMT/BST - London' },
-  { value: 'Europe/Paris', label: 'CET - Paris, Berlin' },
-  { value: 'Europe/Moscow', label: 'MSK - Moscow' },
-  { value: 'Asia/Dubai', label: 'GST - Dubai' },
-  { value: 'Asia/Kolkata', label: 'IST - India' },
-  { value: 'Asia/Singapore', label: 'SGT - Singapore' },
-  { value: 'Asia/Tokyo', label: 'JST - Tokyo' },
-  { value: 'Australia/Sydney', label: 'AEST - Sydney' },
-  { value: 'Pacific/Auckland', label: 'NZST - Auckland' },
-  { value: 'Africa/Lagos', label: 'WAT - Lagos, Nigeria' },
-  { value: 'Africa/Johannesburg', label: 'SAST - Johannesburg' },
-  { value: 'Africa/Cairo', label: 'EET - Cairo' },
-];
+// Grouped timezones for cleaner UI
+const TIMEZONE_GROUPS: Record<string, Array<{ value: string; label: string }>> = {
+  'Popular': [
+    { value: 'America/New_York', label: 'New York (Eastern)' },
+    { value: 'America/Los_Angeles', label: 'Los Angeles (Pacific)' },
+    { value: 'Europe/London', label: 'London (GMT/BST)' },
+    { value: 'Europe/Paris', label: 'Paris (CET)' },
+    { value: 'Asia/Dubai', label: 'Dubai (GST)' },
+    { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+    { value: 'Africa/Lagos', label: 'Lagos (WAT)' },
+  ],
+  'Americas': [
+    { value: 'America/New_York', label: 'New York' },
+    { value: 'America/Chicago', label: 'Chicago' },
+    { value: 'America/Denver', label: 'Denver' },
+    { value: 'America/Los_Angeles', label: 'Los Angeles' },
+    { value: 'America/Toronto', label: 'Toronto' },
+    { value: 'America/Vancouver', label: 'Vancouver' },
+    { value: 'America/Mexico_City', label: 'Mexico City' },
+    { value: 'America/Sao_Paulo', label: 'São Paulo' },
+    { value: 'America/Buenos_Aires', label: 'Buenos Aires' },
+    { value: 'America/Anchorage', label: 'Anchorage (Alaska)' },
+    { value: 'Pacific/Honolulu', label: 'Honolulu (Hawaii)' },
+  ],
+  'Europe': [
+    { value: 'Europe/London', label: 'London' },
+    { value: 'Europe/Paris', label: 'Paris' },
+    { value: 'Europe/Berlin', label: 'Berlin' },
+    { value: 'Europe/Amsterdam', label: 'Amsterdam' },
+    { value: 'Europe/Madrid', label: 'Madrid' },
+    { value: 'Europe/Rome', label: 'Rome' },
+    { value: 'Europe/Moscow', label: 'Moscow' },
+    { value: 'Europe/Istanbul', label: 'Istanbul' },
+  ],
+  'Asia & Pacific': [
+    { value: 'Asia/Dubai', label: 'Dubai' },
+    { value: 'Asia/Singapore', label: 'Singapore' },
+    { value: 'Asia/Hong_Kong', label: 'Hong Kong' },
+    { value: 'Asia/Tokyo', label: 'Tokyo' },
+    { value: 'Asia/Shanghai', label: 'Shanghai' },
+    { value: 'Asia/Seoul', label: 'Seoul' },
+    { value: 'Asia/Kolkata', label: 'Mumbai / Kolkata' },
+    { value: 'Australia/Sydney', label: 'Sydney' },
+    { value: 'Australia/Melbourne', label: 'Melbourne' },
+    { value: 'Pacific/Auckland', label: 'Auckland' },
+  ],
+  'Africa & Middle East': [
+    { value: 'Africa/Lagos', label: 'Lagos' },
+    { value: 'Africa/Johannesburg', label: 'Johannesburg' },
+    { value: 'Africa/Cairo', label: 'Cairo' },
+    { value: 'Africa/Nairobi', label: 'Nairobi' },
+    { value: 'Africa/Casablanca', label: 'Casablanca' },
+    { value: 'Asia/Jerusalem', label: 'Jerusalem' },
+    { value: 'Asia/Riyadh', label: 'Riyadh' },
+  ],
+};
 
-function formatTimezoneOption(tz: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      timeZoneName: 'shortOffset',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date());
-    const offset = parts.find(p => p.type === 'timeZoneName')?.value;
-    if (offset) return `${offset} — ${tz}`;
-  } catch {
-    // ignore
-  }
-  return tz;
-}
 
 export default function SettingsPage() {
   // DB Settings
@@ -269,7 +288,7 @@ export default function SettingsPage() {
   const [newBlockedDate, setNewBlockedDate] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [allTimezones, setAllTimezones] = useState<string[]>(COMMON_TIMEZONES.map(t => t.value));
+  const [allTimezones, setAllTimezones] = useState<string[]>(TIMEZONE_GROUPS['Popular'].map(t => t.value));
   const [timezoneQuery, setTimezoneQuery] = useState('');
 
   // HubSpot Sync state
@@ -330,17 +349,52 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const commonTimezoneValues = useMemo(() => new Set(COMMON_TIMEZONES.map(t => t.value)), []);
+  const [tzDropdownOpen, setTzDropdownOpen] = useState(false);
 
-  const filteredTimezones = useMemo(() => {
+  // Filter timezones based on search query
+  const filteredTimezoneGroups = useMemo(() => {
     const q = timezoneQuery.trim().toLowerCase();
-    const list = q
-      ? allTimezones.filter((tz) => tz.toLowerCase().includes(q))
-      : allTimezones;
+    if (!q) return TIMEZONE_GROUPS;
+    
+    const filtered: Record<string, Array<{ value: string; label: string }>> = {};
+    for (const [group, tzs] of Object.entries(TIMEZONE_GROUPS)) {
+      const matches = tzs.filter(
+        tz => tz.label.toLowerCase().includes(q) || tz.value.toLowerCase().includes(q)
+      );
+      if (matches.length > 0) filtered[group] = matches;
+    }
+    
+    // Also search full IANA list if no group matches
+    if (Object.keys(filtered).length === 0 && allTimezones.length > 0) {
+      const ianaMatches = allTimezones
+        .filter(tz => tz.toLowerCase().includes(q))
+        .slice(0, 20)
+        .map(tz => ({ value: tz, label: tz.split('/').pop()?.replace(/_/g, ' ') || tz }));
+      if (ianaMatches.length > 0) filtered['Other'] = ianaMatches;
+    }
+    
+    return filtered;
+  }, [timezoneQuery, allTimezones]);
 
-    // Avoid rendering thousands of options at once; user can narrow via search.
-    return list.slice(0, 300);
-  }, [allTimezones, timezoneQuery]);
+  // Get display label for current timezone
+  const currentTzLabel = useMemo(() => {
+    for (const tzs of Object.values(TIMEZONE_GROUPS)) {
+      const found = tzs.find(t => t.value === hostTimezone);
+      if (found) return found.label;
+    }
+    // Fallback: format from IANA
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: hostTimezone,
+        timeZoneName: 'shortOffset',
+      }).formatToParts(new Date());
+      const offset = parts.find(p => p.type === 'timeZoneName')?.value || '';
+      const city = hostTimezone.split('/').pop()?.replace(/_/g, ' ') || hostTimezone;
+      return `${city} (${offset})`;
+    } catch {
+      return hostTimezone;
+    }
+  }, [hostTimezone]);
 
   const fetchSettings = async () => {
     try {
@@ -656,48 +710,89 @@ export default function SettingsPage() {
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Host Timezone</label>
-                  <div className="space-y-2">
-                    <input
-                      value={timezoneQuery}
-                      onChange={(e) => setTimezoneQuery(e.target.value)}
-                      placeholder="Search timezones (e.g. Lagos, London, New_York)…"
-                      className="form-input w-full"
-                    />
-
-                    <select
-                      value={hostTimezone}
-                      onChange={(e) => setHostTimezone(e.target.value)}
-                      className="form-input w-full h-40"
-                    >
-                      {!allTimezones.includes(hostTimezone) && !commonTimezoneValues.has(hostTimezone) && (
-                        <option value={hostTimezone}>
-                          {formatTimezoneOption(hostTimezone)}
-                        </option>
-                      )}
-
-                      <optgroup label="Common">
-                        {COMMON_TIMEZONES.map((tz) => (
-                          <option key={tz.value} value={tz.value}>
-                            {tz.label}
-                          </option>
+                  
+                  {/* Selected timezone display / trigger */}
+                  <button
+                    type="button"
+                    onClick={() => setTzDropdownOpen(!tzDropdownOpen)}
+                    className="form-input w-full text-left flex items-center justify-between"
+                  >
+                    <span className="truncate">{currentTzLabel}</span>
+                    <svg className={`w-4 h-4 text-slate-400 transition-transform ${tzDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* Dropdown panel */}
+                  {tzDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-hidden">
+                      {/* Search input */}
+                      <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+                        <input
+                          type="text"
+                          value={timezoneQuery}
+                          onChange={(e) => setTimezoneQuery(e.target.value)}
+                          placeholder="Search cities..."
+                          className="form-input w-full text-sm"
+                          autoFocus
+                        />
+                      </div>
+                      
+                      {/* Grouped options */}
+                      <div className="overflow-y-auto max-h-60">
+                        {Object.entries(filteredTimezoneGroups).map(([group, tzs]) => (
+                          <div key={group}>
+                            <div className="px-3 py-1.5 text-xs font-semibold text-slate-500 bg-slate-50 uppercase tracking-wide sticky top-0">
+                              {group}
+                            </div>
+                            {tzs.map((tz) => (
+                              <button
+                                key={`${group}-${tz.value}`}
+                                type="button"
+                                onClick={() => {
+                                  setHostTimezone(tz.value);
+                                  setTzDropdownOpen(false);
+                                  setTimezoneQuery('');
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-primary-50 flex items-center justify-between ${
+                                  hostTimezone === tz.value ? 'bg-primary-50 text-primary-700 font-medium' : 'text-slate-700'
+                                }`}
+                              >
+                                <span>{tz.label}</span>
+                                {hostTimezone === tz.value && (
+                                  <svg className="w-4 h-4 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         ))}
-                      </optgroup>
-
-                      <optgroup label="All timezones">
-                        {filteredTimezones
-                          .filter((tz) => !commonTimezoneValues.has(tz))
-                          .map((tz) => (
-                            <option key={tz} value={tz}>
-                              {formatTimezoneOption(tz)}
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
-                  </div>
+                        
+                        {Object.keys(filteredTimezoneGroups).length === 0 && (
+                          <div className="px-3 py-4 text-sm text-slate-500 text-center">
+                            No timezones found
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Click outside to close */}
+                  {tzDropdownOpen && (
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => {
+                        setTzDropdownOpen(false);
+                        setTimezoneQuery('');
+                      }}
+                    />
+                  )}
+                  
                   <p className="text-xs text-slate-500 mt-1">
-                    Pick your timezone (IANA). Tip: search first, then select.
+                    Current: <code className="text-xs bg-slate-100 px-1 rounded">{hostTimezone}</code>
                   </p>
                 </div>
                 <div>
