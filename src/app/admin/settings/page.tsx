@@ -351,30 +351,42 @@ export default function SettingsPage() {
 
   const [tzDropdownOpen, setTzDropdownOpen] = useState(false);
 
+  // Get set of all values in predefined groups
+  const groupedTzValues = useMemo(() => {
+    const set = new Set<string>();
+    for (const tzs of Object.values(TIMEZONE_GROUPS)) {
+      for (const tz of tzs) set.add(tz.value);
+    }
+    return set;
+  }, []);
+
   // Filter timezones based on search query
   const filteredTimezoneGroups = useMemo(() => {
     const q = timezoneQuery.trim().toLowerCase();
-    if (!q) return TIMEZONE_GROUPS;
-    
     const filtered: Record<string, Array<{ value: string; label: string }>> = {};
+    
+    // Filter predefined groups
     for (const [group, tzs] of Object.entries(TIMEZONE_GROUPS)) {
-      const matches = tzs.filter(
-        tz => tz.label.toLowerCase().includes(q) || tz.value.toLowerCase().includes(q)
-      );
+      const matches = q
+        ? tzs.filter(tz => tz.label.toLowerCase().includes(q) || tz.value.toLowerCase().includes(q))
+        : tzs;
       if (matches.length > 0) filtered[group] = matches;
     }
     
-    // Also search full IANA list if no group matches
-    if (Object.keys(filtered).length === 0 && allTimezones.length > 0) {
-      const ianaMatches = allTimezones
-        .filter(tz => tz.toLowerCase().includes(q))
-        .slice(0, 20)
+    // Always add "All Timezones" section with IANA zones not in groups
+    if (allTimezones.length > 0) {
+      const ianaTimezones = allTimezones
+        .filter(tz => !groupedTzValues.has(tz)) // exclude already grouped
+        .filter(tz => !q || tz.toLowerCase().includes(q)) // apply search
+        .slice(0, q ? 30 : 50) // show more when searching
         .map(tz => ({ value: tz, label: tz.split('/').pop()?.replace(/_/g, ' ') || tz }));
-      if (ianaMatches.length > 0) filtered['Other'] = ianaMatches;
+      if (ianaTimezones.length > 0) {
+        filtered['All Timezones'] = ianaTimezones;
+      }
     }
     
     return filtered;
-  }, [timezoneQuery, allTimezones]);
+  }, [timezoneQuery, allTimezones, groupedTzValues]);
 
   // Get display label for current timezone
   const currentTzLabel = useMemo(() => {
