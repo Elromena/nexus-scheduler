@@ -21,8 +21,8 @@ export interface CalendarEvent {
   htmlLink?: string;
   summary: string;
   description?: string;
-  start: { dateTime: string; timeZone?: string };
-  end: { dateTime: string; timeZone?: string };
+  start: { dateTime?: string; date?: string; timeZone?: string };
+  end: { dateTime?: string; date?: string; timeZone?: string };
   attendees?: Array<{ email: string }>;
   conferenceData?: {
     createRequest?: {
@@ -181,15 +181,17 @@ export class GoogleCalendarClient {
   /**
    * Get events for a specific date range
    */
-  async listEvents(date: string): Promise<CalendarEvent[]> {
-    const startOfDay = `${date}T00:00:00Z`;
-    const endOfDay = `${date}T23:59:59Z`;
-    
+  async listEvents(date: string, hostTimezone: string = 'UTC'): Promise<CalendarEvent[]> {
+    // Important: compute the correct UTC range for "that day" in the host timezone.
+    const timeMin = zonedTimeToUtc(date, '00:00', hostTimezone).toISOString();
+    const timeMax = zonedTimeToUtc(date, '23:59', hostTimezone).toISOString();
+
     const params = new URLSearchParams({
       singleEvents: 'true',
-      timeMin: startOfDay,
-      timeMax: endOfDay,
-      orderBy: 'startTime'
+      timeMin,
+      timeMax,
+      orderBy: 'startTime',
+      timeZone: hostTimezone,
     });
 
     const data = await this.request(`/calendars/primary/events?${params}`) as { items?: CalendarEvent[] };
@@ -199,46 +201,36 @@ export class GoogleCalendarClient {
   /**
    * Get available time slots for a date
    */
-  async getAvailability(date: string, allSlots: string[], hostTimezone: string = 'UTC'): Promise<string[]> {
+  async getAvailability(
+    date: string,
+    allSlots: string[],
+    hostTimezone: string = 'UTC',
+    slotDurationMinutes: number = 30,
+    options?: { excludeEventId?: string; strict?: boolean }
+  ): Promise<string[]> {
+    const strict = options?.strict ?? true; // default: fail closed to prevent double-booking
     try {
-      const events = await this.listEvents(date);
-      
-      // Extract busy times from events
-      const busyTimes = new Set<string>();
-      for (const event of events) {
-        if (event.start?.dateTime && event.end?.dateTime) {
-          const startTime = new Date(event.start.dateTime);
-          const endTime = new Date(event.end.dateTime);
-          
-          // Block all slots that fall within this event's duration
-          for (const slot of allSlots) {
-            // Let's convert the event start/end to "HH:MM" in the host's timezone
-            const eventStartLocal = new Intl.DateTimeFormat('en-GB', {
-              timeZone: hostTimezone,
-              hour: '2-digit',
-              minute: '2-digit',
-            }).format(startTime);
-            
-            const eventEndLocal = new Intl.DateTimeFormat('en-GB', {
-              timeZone: hostTimezone,
-              hour: '2-digit',
-              minute: '2-digit',
-            }).format(endTime);
+      const events = await this.listEvents(date, hostTimezone);
+      const busyIntervals = eventsToBusyIntervals(events, { excludeEventId: options?.excludeEventId });
 
-            // If the event spans across days, it's more complex, but for same-day:
-            if (slot >= eventStartLocal && slot < eventEndLocal) {
-              busyTimes.add(slot);
-            }
-          }
+      // If there is an all-day event (or anything that blocks the whole day), no slots.
+      if (busyIntervals.some(i => i.blocksAllDay)) return [];
+
+      return allSlots.filter((slot) => {
+        const slotStart = zonedTimeToUtc(date, slot, hostTimezone);
+        const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
+
+        // Slot is available only if it does NOT overlap any busy interval
+        for (const busy of busyIntervals) {
+          if (!busy.start || !busy.end) continue;
+          const overlaps = slotStart < busy.end && slotEnd > busy.start;
+          if (overlaps) return false;
         }
-      }
-
-      // Filter out busy slots
-      return allSlots.filter(slot => !busyTimes.has(slot));
+        return true;
+      });
     } catch (error) {
       console.error('Error getting availability:', error);
-      // Return all slots if there's an error (fail open)
-      return allSlots;
+      return strict ? [] : allSlots;
     }
   }
 
@@ -290,19 +282,21 @@ export class GoogleCalendarClient {
   /**
    * Check if a specific slot is still available
    */
-  async isSlotAvailable(date: string, time: string): Promise<boolean> {
-    const events = await this.listEvents(date);
-    
-    for (const event of events) {
-      if (event.start?.dateTime) {
-        const eventTime = event.start.dateTime.split('T')[1]?.substring(0, 5);
-        if (eventTime === time) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
+  async isSlotAvailable(
+    date: string,
+    time: string,
+    hostTimezone: string = 'UTC',
+    slotDurationMinutes: number = 30,
+    options?: { excludeEventId?: string; strict?: boolean }
+  ): Promise<boolean> {
+    const available = await this.getAvailability(
+      date,
+      [time],
+      hostTimezone,
+      slotDurationMinutes,
+      { excludeEventId: options?.excludeEventId, strict: options?.strict }
+    );
+    return available.includes(time);
   }
 
   /**
@@ -412,3 +406,90 @@ export const DEFAULT_TIME_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
 ];
+
+// ===========================
+// Timezone helpers (no deps)
+// ===========================
+
+function parseDateYMD(date: string): { year: number; month: number; day: number } {
+  const [y, m, d] = date.split('-').map(Number);
+  return { year: y, month: m, day: d };
+}
+
+function parseTimeHM(time: string): { hour: number; minute: number } {
+  const [h, m] = time.split(':').map(Number);
+  return { hour: h, minute: m };
+}
+
+function getZonedParts(instant: Date, timeZone: string): Record<string, number> {
+  // Use a stable locale; extract numeric parts.
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  const parts = dtf.formatToParts(instant);
+  const map: Record<string, number> = {};
+  for (const p of parts) {
+    if (p.type === 'year' || p.type === 'month' || p.type === 'day' || p.type === 'hour' || p.type === 'minute' || p.type === 'second') {
+      map[p.type] = Number(p.value);
+    }
+  }
+  return map;
+}
+
+/**
+ * Convert a wall-clock date+time in an IANA timezone into a UTC Date.
+ * Implements a small iterative correction (similar to date-fns-tz) without extra deps.
+ */
+function zonedTimeToUtc(date: string, time: string, timeZone: string): Date {
+  const { year, month, day } = parseDateYMD(date);
+  const { hour, minute } = parseTimeHM(time);
+
+  const targetAsUTC = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let guess = new Date(targetAsUTC);
+
+  // Iterate a couple times to correct for timezone offset / DST.
+  for (let i = 0; i < 3; i++) {
+    const p = getZonedParts(guess, timeZone);
+    const guessAsUTCFromZoned = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second || 0);
+    const diff = guessAsUTCFromZoned - targetAsUTC;
+    if (diff === 0) break;
+    guess = new Date(guess.getTime() - diff);
+  }
+
+  return guess;
+}
+
+type BusyInterval = { start: Date | null; end: Date | null; blocksAllDay?: boolean; eventId?: string };
+
+function eventsToBusyIntervals(events: CalendarEvent[], opts?: { excludeEventId?: string }): BusyInterval[] {
+  const intervals: BusyInterval[] = [];
+
+  for (const event of events) {
+    if (opts?.excludeEventId && event.id && event.id === opts.excludeEventId) continue;
+
+    // All-day events: Calendar API uses "date" (YYYY-MM-DD) instead of "dateTime"
+    const isAllDay = !!event.start?.date && !!event.end?.date && !event.start?.dateTime && !event.end?.dateTime;
+    if (isAllDay) {
+      intervals.push({ start: null, end: null, blocksAllDay: true, eventId: event.id });
+      continue;
+    }
+
+    if (event.start?.dateTime && event.end?.dateTime) {
+      const start = new Date(event.start.dateTime);
+      const end = new Date(event.end.dateTime);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        intervals.push({ start, end, eventId: event.id });
+      }
+    }
+  }
+
+  return intervals;
+}

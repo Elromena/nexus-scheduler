@@ -3,8 +3,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
-import { getGoogleCalendarClient, DEFAULT_TIME_SLOTS } from '@/lib/integrations/google-calendar';
+import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
 import { isPastDate } from '@/lib/utils/dates';
+import { slotLocks } from '@/lib/db/slot-locks';
 
 // Default calendar configuration
 const DEFAULT_CALENDAR_CONFIG = {
@@ -41,6 +42,14 @@ export async function POST(request: NextRequest) {
 
     const { env } = getCloudflareContext();
     const db = drizzle(env.DB, { schema });
+
+    // Host timezone (source of truth for slot generation & calendar queries)
+    const hostTimezoneSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'host_timezone'))
+      .get();
+    const hostTimezone = hostTimezoneSetting?.value || 'America/New_York';
 
     // Get calendar configuration
     const calendarConfigSetting = await db
@@ -98,7 +107,6 @@ export async function POST(request: NextRequest) {
       .get();
 
     let allSlots: string[];
-    let usingCustomSlots = false;
     
     if (slotsSetting?.value) {
       try {
@@ -106,7 +114,6 @@ export async function POST(request: NextRequest) {
         // Only use custom slots if array actually has items
         if (Array.isArray(parsed) && parsed.length > 0) {
           allSlots = parsed;
-          usingCustomSlots = true;
         } else {
           allSlots = generateSlotsFromBusinessHours(calendarConfig);
         }
@@ -140,17 +147,29 @@ export async function POST(request: NextRequest) {
 
     if (!googleCreds || !calendarEmail) {
       console.error('Google Calendar credentials not configured');
-      return NextResponse.json({
-        success: true,
-        slots: allSlots,
-        warning: 'Calendar integration not configured'
-      });
+      return NextResponse.json(
+        { success: false, error: 'Calendar integration not configured', slots: [] },
+        { status: 503 }
+      );
     }
 
-    // Get availability from Google Calendar
+    // Get availability from Google Calendar (fail closed: do not show slots if calendar is unavailable)
     const calendar = getGoogleCalendarClient(googleCreds, calendarEmail);
-    const hostTimezone = calendarConfigSetting?.value ? JSON.parse(calendarConfigSetting.value).hostTimezone || 'UTC' : 'UTC';
-    const availableSlots = await calendar.getAvailability(date, allSlots, hostTimezone);
+    const availableSlotsFromCalendar = await calendar.getAvailability(
+      date,
+      allSlots,
+      hostTimezone,
+      (calendarConfig.slotDuration || 30) + (calendarConfig.bufferTime || 0),
+      { strict: true }
+    );
+
+    // Also exclude any slots that are locked in our DB (race-condition protection)
+    const locks = await db
+      .select({ scheduledTime: slotLocks.scheduledTime })
+      .from(slotLocks)
+      .where(eq(slotLocks.scheduledDate, date));
+    const locked = new Set(locks.map((l: { scheduledTime: string }) => l.scheduledTime));
+    const availableSlots = availableSlotsFromCalendar.filter(s => !locked.has(s));
 
     return NextResponse.json({
       success: true,
@@ -160,8 +179,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Slots error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch available slots' },
-      { status: 500 }
+      { success: false, error: 'Calendar is temporarily unavailable', slots: [] },
+      { status: 503 }
     );
   }
 }

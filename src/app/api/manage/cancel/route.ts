@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,6 +78,13 @@ export async function POST(request: NextRequest) {
         console.error('Failed to delete Google Calendar event:', calError);
         // Continue anyway - database update is more important
       }
+    }
+
+    // Release slot lock so the slot can be re-booked
+    try {
+      await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
+    } catch (lockError) {
+      console.error('Failed to delete slot lock:', lockError);
     }
 
     // Update booking status in database

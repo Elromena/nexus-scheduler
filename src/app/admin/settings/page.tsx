@@ -218,7 +218,7 @@ const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Common timezones for dropdown
+// Fallback timezones (used if browser cannot enumerate IANA zones)
 const COMMON_TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (ET) - New York' },
   { value: 'America/Chicago', label: 'Central Time (CT) - Chicago' },
@@ -252,6 +252,7 @@ export default function SettingsPage() {
   const [newBlockedDate, setNewBlockedDate] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [allTimezones, setAllTimezones] = useState<string[]>(COMMON_TIMEZONES.map(t => t.value));
 
   // HubSpot Sync state
   const [syncing, setSyncing] = useState(false);
@@ -286,6 +287,20 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchSettings();
+  }, []);
+
+  // Expand timezone selector to full IANA list (when available)
+  useEffect(() => {
+    try {
+      // supportedValuesOf is available in modern Chromium/Firefox; may be missing elsewhere.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supported = (Intl as any)?.supportedValuesOf?.('timeZone') as string[] | undefined;
+      if (supported && Array.isArray(supported) && supported.length > 50) {
+        setAllTimezones(supported);
+      }
+    } catch {
+      // keep fallback list
+    }
   }, []);
 
   const fetchSettings = async () => {
@@ -504,17 +519,20 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Host Timezone</label>
-                  <select
+                  <input
                     value={hostTimezone}
                     onChange={(e) => setHostTimezone(e.target.value)}
+                    list="host-timezones"
+                    placeholder="Start typing a timezone… (e.g. America/New_York)"
                     className="form-input w-full"
-                  >
-                    {COMMON_TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  />
+                  <datalist id="host-timezones">
+                    {allTimezones.map((tz) => (
+                      <option key={tz} value={tz} />
                     ))}
-                  </select>
+                  </datalist>
                   <p className="text-xs text-slate-500 mt-1">
-                    Your availability times are set in this timezone
+                    Your availability times are set in this timezone (IANA format)
                   </p>
                 </div>
                 <div>

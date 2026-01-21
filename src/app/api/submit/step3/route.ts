@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import * as schema from '@/lib/db/schema';
 import { validateBooking } from '@/lib/utils/validation';
 import { toISODateTime } from '@/lib/utils/dates';
 import { getHubSpotClient } from '@/lib/integrations/hubspot';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
   try {
@@ -85,29 +86,73 @@ export async function POST(request: NextRequest) {
       .from(schema.settings)
       .where(eq(schema.settings.key, 'host_email'))
       .get();
+    const calendarConfigSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'calendar_config'))
+      .get();
     
     const hostTimezone = hostTimezoneSetting?.value || 'America/New_York';
     const calendarEmail = hostEmailSetting?.value || env.GOOGLE_CALENDAR_EMAIL;
+    let slotDurationMinutes = 30;
+    let bufferMinutes = 0;
+    if (calendarConfigSetting?.value) {
+      try {
+        const parsed = JSON.parse(calendarConfigSetting.value);
+        slotDurationMinutes = Number(parsed?.slotDuration) || 30;
+        bufferMinutes = Number(parsed?.bufferTime) || 0;
+      } catch {
+        // defaults
+      }
+    }
 
     if (!isTestMode) {
-      // Google Calendar Integration
-      if (env.GOOGLE_SERVICE_ACCOUNT && calendarEmail) {
-        try {
-          const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail);
-          const isAvailable = await calendar.isSlotAvailable(validData.date, validData.time);
-          if (!isAvailable) {
-            return NextResponse.json({
-              success: false,
-              error: 'Sorry, this time slot was just taken. Please select another time.',
-            }, { status: 409 });
-          }
+      // Hard requirement in live mode: calendar must be configured so we never double-book.
+      if (!env.GOOGLE_SERVICE_ACCOUNT || !calendarEmail) {
+        return NextResponse.json(
+          { success: false, error: 'Calendar integration not configured. Cannot accept bookings in live mode.' },
+          { status: 503 }
+        );
+      }
 
-          const startTime = `${validData.date}T${validData.time}:00`;
-          const [hours, minutes] = validData.time.split(':').map(Number);
-          const endDate = new Date(2000, 0, 1, hours, minutes + 30);
-          const endTime = `${validData.date}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
+      // First, enforce scheduler-level slot lock to prevent race-condition double booking
+      try {
+        await db.insert(slotLocks).values({
+          id: bookingId,
+          scheduledDate: validData.date,
+          scheduledTime: validData.time,
+        });
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Sorry, this time slot was just taken. Please select another time.' },
+          { status: 409 }
+        );
+      }
 
-          const eventDescription = `Start With Blockchain-Ads Account Strategist
+      // Then verify against the host's Google Calendar (includes external meetings)
+      const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail);
+      try {
+        const isAvailable = await calendar.isSlotAvailable(
+          validData.date,
+          validData.time,
+          hostTimezone,
+          slotDurationMinutes + bufferMinutes,
+          { strict: true }
+        );
+        if (!isAvailable) {
+          await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
+          return NextResponse.json(
+            { success: false, error: 'Sorry, this time slot was just taken. Please select another time.' },
+            { status: 409 }
+          );
+        }
+
+        const startTime = `${validData.date}T${validData.time}:00`;
+        const [hours, minutes] = validData.time.split(':').map(Number);
+        const endDate = new Date(2000, 0, 1, hours, minutes + slotDurationMinutes);
+        const endTime = `${validData.date}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
+
+        const eventDescription = `Start With Blockchain-Ads Account Strategist
 Direct personalized onboarding and assistance for account verification
 
 Need to make changes?
@@ -121,25 +166,30 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
 • Budget: ${validData.budget}
 • Objective: ${validData.objective}`;
 
-          const event = await calendar.createEvent({
-            summary: `Blockchain-Ads Account Verification`,
-            description: eventDescription,
-            startTime,
-            endTime,
-            attendeeEmail: validData.email,
-            timeZone: hostTimezone,
-          });
+        const event = await calendar.createEvent({
+          summary: `Blockchain-Ads Account Verification`,
+          description: eventDescription,
+          startTime,
+          endTime,
+          attendeeEmail: validData.email,
+          timeZone: hostTimezone,
+        });
 
-          googleEventId = event.id || '';
-          googleMeetLink = event.htmlLink || '';
+        googleEventId = event.id || '';
+        googleMeetLink = event.htmlLink || '';
 
-          if (event.conferenceData?.entryPoints) {
-            const meetEntry = event.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
-            if (meetEntry) googleMeetLink = meetEntry.uri;
-          }
-        } catch (error) {
-          console.error('Google Calendar error:', error);
+        if (event.conferenceData?.entryPoints) {
+          const meetEntry = event.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video');
+          if (meetEntry) googleMeetLink = meetEntry.uri;
         }
+      } catch (error) {
+        console.error('Google Calendar error:', error);
+        // Fail closed: release lock and reject booking
+        await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
+        return NextResponse.json(
+          { success: false, error: 'Calendar is temporarily unavailable. Please try again shortly.' },
+          { status: 503 }
+        );
       }
 
       // HubSpot Integration
@@ -176,35 +226,66 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
     }
 
     // Save booking to database - INCLUDES HubSpot IDs now
-    await db.insert(schema.bookings).values({
-      id: bookingId,
-      visitorId: visitorId || null,
-      firstName: validData.firstName,
-      lastName: validData.lastName,
-      email: validData.email,
-      website: validData.website,
-      industry: validData.industry,
-      heardFrom: validData.heardFrom,
-      objective: validData.objective,
-      budget: validData.budget,
-      roleType: validData.roleType,
-      scheduledDate: validData.date,
-      scheduledTime: validData.time,
-      timezone: validData.timezone || null,
-      hubspotContactId: hubspotId || null,
-      hubspotDealId: hubspotDealId,
-      hubspotMeetingId: hubspotMeetingId,
-      googleEventId: googleEventId || null,
-      googleMeetLink: googleMeetLink || null,
-      status: 'confirmed',
-      attributionSource: attribution.source,
-      attributionMedium: attribution.medium,
-      attributionCampaign: attribution.campaign,
-      attributionLandingPage: attribution.landingPage,
-      attributionReferrer: attribution.referrer,
-      createdAt: now,
-      updatedAt: now,
-    });
+    try {
+      // Additional safety: if another booking already exists for this date/time, reject
+      const existing = await db
+        .select({ id: schema.bookings.id })
+        .from(schema.bookings)
+        .where(and(
+          inArray(schema.bookings.status, ['pending', 'confirmed']),
+          eq(schema.bookings.scheduledDate, validData.date),
+          eq(schema.bookings.scheduledTime, validData.time),
+        ))
+        .get();
+
+      if (existing) {
+        await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
+        return NextResponse.json(
+          { success: false, error: 'Sorry, this time slot was just taken. Please select another time.' },
+          { status: 409 }
+        );
+      }
+
+      await db.insert(schema.bookings).values({
+        id: bookingId,
+        visitorId: visitorId || null,
+        firstName: validData.firstName,
+        lastName: validData.lastName,
+        email: validData.email,
+        website: validData.website,
+        industry: validData.industry,
+        heardFrom: validData.heardFrom,
+        objective: validData.objective,
+        budget: validData.budget,
+        roleType: validData.roleType,
+        scheduledDate: validData.date,
+        scheduledTime: validData.time,
+        timezone: validData.timezone || null,
+        hubspotContactId: hubspotId || null,
+        hubspotDealId: hubspotDealId,
+        hubspotMeetingId: hubspotMeetingId,
+        googleEventId: googleEventId || null,
+        googleMeetLink: googleMeetLink || null,
+        status: 'confirmed',
+        attributionSource: attribution.source,
+        attributionMedium: attribution.medium,
+        attributionCampaign: attribution.campaign,
+        attributionLandingPage: attribution.landingPage,
+        attributionReferrer: attribution.referrer,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (dbError) {
+      console.error('Failed to save booking:', dbError);
+      // Release lock so the slot is not stuck
+      if (!isTestMode) {
+        await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
+      }
+      return NextResponse.json(
+        { success: false, error: 'Failed to complete booking' },
+        { status: 500 }
+      );
+    }
 
     // Track the form submission event
     if (visitorId) {

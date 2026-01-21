@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,30 +85,98 @@ export async function POST(request: NextRequest) {
       .from(schema.settings)
       .where(eq(schema.settings.key, 'host_email'))
       .get();
+    const calendarConfigSetting = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.key, 'calendar_config'))
+      .get();
 
     const hostTimezone = hostTimezoneSetting?.value || 'America/New_York';
     const calendarEmail = hostEmailSetting?.value || env.GOOGLE_CALENDAR_EMAIL;
-
-    // Update Google Calendar event if exists
-    if (booking.googleEventId && env.GOOGLE_SERVICE_ACCOUNT && calendarEmail) {
+    let slotDurationMinutes = 30;
+    let bufferMinutes = 0;
+    if (calendarConfigSetting?.value) {
       try {
-        const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail);
-        
-        // Calculate new times
-        const startTime = `${newDate}T${newTime}:00`;
-        const [hours, minutes] = newTime.split(':').map(Number);
-        const endDate = new Date(2000, 0, 1, hours, minutes + 30);
-        const endTime = `${newDate}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
-
-        await calendar.updateEvent(booking.googleEventId, {
-          startTime,
-          endTime,
-          timeZone: hostTimezone,
-        });
-      } catch (calError) {
-        console.error('Failed to update Google Calendar event:', calError);
-        // Continue anyway - database update is more important
+        const parsed = JSON.parse(calendarConfigSetting.value);
+        slotDurationMinutes = Number(parsed?.slotDuration) || 30;
+        bufferMinutes = Number(parsed?.bufferTime) || 0;
+      } catch {
+        // defaults
       }
+    }
+
+    // Require calendar config in live mode for rescheduling too
+    if (!env.GOOGLE_SERVICE_ACCOUNT || !calendarEmail || !booking.googleEventId) {
+      return NextResponse.json(
+        { success: false, error: 'Calendar integration not configured for rescheduling' },
+        { status: 503 }
+      );
+    }
+
+    // Update slot lock first (this will fail if slot is already taken)
+    const previousSlot = { date: booking.scheduledDate, time: booking.scheduledTime };
+    try {
+      await db
+        .update(slotLocks)
+        .set({ scheduledDate: newDate, scheduledTime: newTime })
+        .where(eq(slotLocks.id, bookingId));
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Sorry, this time slot was just taken. Please select another time.' },
+        { status: 409 }
+      );
+    }
+
+    // Update Google Calendar event (fail closed)
+    try {
+      const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail);
+
+      // Verify new slot is actually free on host calendar (includes external meetings)
+      const isAvailable = await calendar.isSlotAvailable(
+        newDate,
+        newTime,
+        hostTimezone,
+        slotDurationMinutes + bufferMinutes,
+        { excludeEventId: booking.googleEventId, strict: true }
+      );
+      if (!isAvailable) {
+        // Roll back lock to previous slot
+        await db
+          .update(slotLocks)
+          .set({ scheduledDate: previousSlot.date, scheduledTime: previousSlot.time })
+          .where(eq(slotLocks.id, bookingId));
+
+        return NextResponse.json(
+          { success: false, error: 'Sorry, this time slot was just taken. Please select another time.' },
+          { status: 409 }
+        );
+      }
+
+      // Calculate new times
+      const startTime = `${newDate}T${newTime}:00`;
+      const [hours, minutes] = newTime.split(':').map(Number);
+      const endDate = new Date(2000, 0, 1, hours, minutes + slotDurationMinutes);
+      const endTime = `${newDate}T${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}:00`;
+
+      await calendar.updateEvent(booking.googleEventId, {
+        startTime,
+        endTime,
+        timeZone: hostTimezone,
+      });
+    } catch (calError) {
+      console.error('Failed to update Google Calendar event:', calError);
+      // Roll back lock to previous slot
+      try {
+        await db
+          .update(slotLocks)
+          .set({ scheduledDate: previousSlot.date, scheduledTime: previousSlot.time })
+          .where(eq(slotLocks.id, bookingId));
+      } catch {}
+
+      return NextResponse.json(
+        { success: false, error: 'Calendar is temporarily unavailable. Please try again shortly.' },
+        { status: 503 }
+      );
     }
 
     // Update booking in database
