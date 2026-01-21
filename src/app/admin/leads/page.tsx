@@ -37,10 +37,11 @@ export default function LeadsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [visibility, setVisibility] = useState<'active' | 'excluded' | 'all'>('active');
 
   useEffect(() => {
     fetchLeads();
-  }, [page, status]);
+  }, [page, status, visibility]);
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -52,6 +53,7 @@ export default function LeadsPage() {
       });
       if (status) params.set('status', status);
       if (search) params.set('search', search);
+      if (visibility) params.set('visibility', visibility);
 
       const response = await fetch(`/scheduler/api/leads?${params}`, {
         headers: {
@@ -128,6 +130,18 @@ export default function LeadsPage() {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
             <option value="no_show">No Show</option>
+          </select>
+          <select
+            className="form-select w-auto"
+            value={visibility}
+            onChange={(e) => {
+              setVisibility(e.target.value as 'active' | 'excluded' | 'all');
+              setPage(1);
+            }}
+          >
+            <option value="active">Active leads</option>
+            <option value="excluded">Excluded</option>
+            <option value="all">All</option>
           </select>
           <button type="submit" className="btn-primary w-auto px-6">
             Search

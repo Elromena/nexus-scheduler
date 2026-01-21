@@ -128,6 +128,10 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const booking = data?.booking || {};
   const visitor = data?.visitor || null;
+  const [savingExclusion, setSavingExclusion] = useState(false);
+  const [exclusionMsg, setExclusionMsg] = useState<string | null>(null);
+
+  const isExcluded = Number((booking as any).excludedFromAnalytics || 0) === 1;
 
   // Pagination state for timeline
   const [page, setPage] = useState(1);
@@ -282,6 +286,34 @@ export default function LeadDetailPage() {
     fetchLead();
   }, [leadId]);
 
+  const toggleExcluded = async () => {
+    if (!leadId) return;
+    setSavingExclusion(true);
+    setExclusionMsg(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch(`/scheduler/api/leads/${leadId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ excludedFromAnalytics: !isExcluded }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to update');
+      }
+      // refresh current view
+      setData((prev) => prev ? { ...prev, booking: result.data.booking } : prev);
+      setExclusionMsg(!isExcluded ? 'Excluded from analytics/leads.' : 'Restored to analytics/leads.');
+    } catch (err) {
+      setExclusionMsg(err instanceof Error ? err.message : 'Failed to update exclusion');
+    } finally {
+      setSavingExclusion(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -309,10 +341,36 @@ export default function LeadDetailPage() {
             Booking ID: {String(booking.id || '')}
           </p>
         </div>
-        <Link href="/admin/leads" className="btn-outline">
-          Back to leads
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleExcluded}
+            disabled={savingExclusion}
+            className={isExcluded ? 'btn-outline' : 'btn-primary'}
+          >
+            {savingExclusion
+              ? 'Saving...'
+              : isExcluded
+                ? 'Restore to analytics/leads'
+                : 'Exclude from analytics/leads'}
+          </button>
+          <Link href="/admin/leads" className="btn-outline">
+            Back to leads
+          </Link>
+        </div>
       </div>
+
+      {exclusionMsg && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+          {exclusionMsg}
+        </div>
+      )}
+
+      {isExcluded && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          This booking is currently <strong>excluded</strong> from analytics and the default Leads list.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg border border-slate-200 p-6 lg:col-span-2">

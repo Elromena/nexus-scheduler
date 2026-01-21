@@ -90,3 +90,47 @@ export async function GET(
     );
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { env } = getCloudflareContext();
+    const db = drizzle(env.DB, { schema });
+    const { id: leadId } = await context.params;
+
+    const body = await request.json();
+    const excluded = body?.excludedFromAnalytics;
+    if (typeof excluded !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'Send { excludedFromAnalytics: true|false }' },
+        { status: 400 }
+      );
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .update(schema.bookings)
+      .set({ excludedFromAnalytics: excluded ? 1 : 0, updatedAt: now })
+      .where(eq(schema.bookings.id, leadId));
+
+    const booking = await db
+      .select()
+      .from(schema.bookings)
+      .where(eq(schema.bookings.id, leadId))
+      .get();
+
+    return NextResponse.json({ success: true, data: { booking } });
+  } catch (error) {
+    console.error('Lead update error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to update lead' },
+      { status: 500 }
+    );
+  }
+}

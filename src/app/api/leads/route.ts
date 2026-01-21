@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
-import { desc, eq, like, and, gte, lte, sql } from 'drizzle-orm';
+import { desc, eq, and, gte, lte, sql } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 
 // Simple auth check
@@ -32,11 +32,19 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const visibility = (searchParams.get('visibility') || 'active').toLowerCase(); // active | excluded | all
 
     const offset = (page - 1) * limit;
 
     // Build conditions array
     const conditions = [];
+
+    // By default, hide excluded bookings from Leads
+    if (visibility === 'excluded') {
+      conditions.push(eq(schema.bookings.excludedFromAnalytics, 1));
+    } else if (visibility !== 'all') {
+      conditions.push(eq(schema.bookings.excludedFromAnalytics, 0));
+    }
     
     if (status) {
       conditions.push(eq(schema.bookings.status, status));
