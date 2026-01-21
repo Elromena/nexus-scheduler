@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 // Debug Section Component
 function DebugSection() {
@@ -240,6 +240,23 @@ const COMMON_TIMEZONES = [
   { value: 'Africa/Cairo', label: 'EET - Cairo' },
 ];
 
+function formatTimezoneOption(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const offset = parts.find(p => p.type === 'timeZoneName')?.value;
+    if (offset) return `${offset} — ${tz}`;
+  } catch {
+    // ignore
+  }
+  return tz;
+}
+
 export default function SettingsPage() {
   // DB Settings
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -253,6 +270,7 @@ export default function SettingsPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [allTimezones, setAllTimezones] = useState<string[]>(COMMON_TIMEZONES.map(t => t.value));
+  const [timezoneQuery, setTimezoneQuery] = useState('');
 
   // HubSpot Sync state
   const [syncing, setSyncing] = useState(false);
@@ -302,6 +320,18 @@ export default function SettingsPage() {
       // keep fallback list
     }
   }, []);
+
+  const commonTimezoneValues = useMemo(() => new Set(COMMON_TIMEZONES.map(t => t.value)), []);
+
+  const filteredTimezones = useMemo(() => {
+    const q = timezoneQuery.trim().toLowerCase();
+    const list = q
+      ? allTimezones.filter((tz) => tz.toLowerCase().includes(q))
+      : allTimezones;
+
+    // Avoid rendering thousands of options at once; user can narrow via search.
+    return list.slice(0, 300);
+  }, [allTimezones, timezoneQuery]);
 
   const fetchSettings = async () => {
     try {
@@ -519,20 +549,46 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Host Timezone</label>
-                  <input
-                    value={hostTimezone}
-                    onChange={(e) => setHostTimezone(e.target.value)}
-                    list="host-timezones"
-                    placeholder="Start typing a timezone… (e.g. America/New_York)"
-                    className="form-input w-full"
-                  />
-                  <datalist id="host-timezones">
-                    {allTimezones.map((tz) => (
-                      <option key={tz} value={tz} />
-                    ))}
-                  </datalist>
+                  <div className="space-y-2">
+                    <input
+                      value={timezoneQuery}
+                      onChange={(e) => setTimezoneQuery(e.target.value)}
+                      placeholder="Search timezones (e.g. Lagos, London, New_York)…"
+                      className="form-input w-full"
+                    />
+
+                    <select
+                      value={hostTimezone}
+                      onChange={(e) => setHostTimezone(e.target.value)}
+                      className="form-input w-full h-40"
+                    >
+                      {!allTimezones.includes(hostTimezone) && !commonTimezoneValues.has(hostTimezone) && (
+                        <option value={hostTimezone}>
+                          {formatTimezoneOption(hostTimezone)}
+                        </option>
+                      )}
+
+                      <optgroup label="Common">
+                        {COMMON_TIMEZONES.map((tz) => (
+                          <option key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </option>
+                        ))}
+                      </optgroup>
+
+                      <optgroup label="All timezones">
+                        {filteredTimezones
+                          .filter((tz) => !commonTimezoneValues.has(tz))
+                          .map((tz) => (
+                            <option key={tz} value={tz}>
+                              {formatTimezoneOption(tz)}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </select>
+                  </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Your availability times are set in this timezone (IANA format)
+                    Pick your timezone (IANA). Tip: search first, then select.
                   </p>
                 </div>
                 <div>
