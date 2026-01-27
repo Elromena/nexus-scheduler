@@ -164,7 +164,7 @@ Click "Publish" in the Webflow Designer to make changes live.
 
 ## Admin Dashboard
 
-Access at: `https://yourdomain.com/scheduler/admin`
+Access at: `https://blockchain-ads.com/scheduler/admin`
 
 Login with your `ADMIN_PASSWORD`.
 
@@ -195,7 +195,7 @@ Login with your `ADMIN_PASSWORD`.
 
 Link directly to the scheduler:
 ```
-https://yourdomain.com/scheduler
+https://blockchain-ads.com/scheduler
 ```
 
 ### Option 2: Modal Popup
@@ -214,8 +214,8 @@ Then add to **Footer Code** (Site Settings → Custom Code):
   const isStaging = host.includes('webflow.io');
 
   const schedulerBase = isStaging
-    ? 'https://your-staging.webflow.io'
-    : 'https://www.yourdomain.com';
+    ? 'https://blockchain-team.webflow.io'
+    : 'https://www.blockchain-ads.com';
 
   // Load tracker
   const s = document.createElement('script');
