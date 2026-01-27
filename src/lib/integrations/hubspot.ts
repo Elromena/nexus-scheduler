@@ -246,7 +246,7 @@ ${meetingData.meetLink ? `Join Meeting: ${meetingData.meetLink}` : ''}`;
 
     // Create meeting with Google Meet link
     const meetingId = await this.createMeeting(contactId, {
-      hs_timestamp: new Date().toISOString(),
+      hs_timestamp: meetingData.startTime, // Must match hs_meeting_start_time per HubSpot docs
       hs_meeting_title: 'Blockchain-Ads Account Verification',
       hs_meeting_body: meetingBody,
       hs_meeting_start_time: meetingData.startTime,
