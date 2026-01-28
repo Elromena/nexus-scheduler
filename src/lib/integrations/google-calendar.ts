@@ -216,9 +216,14 @@ export class GoogleCalendarClient {
       // If there is an all-day event (or anything that blocks the whole day), no slots.
       if (busyIntervals.some(i => i.blocksAllDay)) return [];
 
+      const now = new Date();
+
       return allSlots.filter((slot) => {
         const slotStart = zonedTimeToUtc(date, slot, hostTimezone);
         const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
+
+        // Filter out past times (if slot is today and has already passed)
+        if (slotStart <= now) return false;
 
         // Slot is available only if it does NOT overlap any busy interval
         for (const busy of busyIntervals) {
