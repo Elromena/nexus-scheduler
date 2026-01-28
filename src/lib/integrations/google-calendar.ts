@@ -217,13 +217,14 @@ export class GoogleCalendarClient {
       if (busyIntervals.some(i => i.blocksAllDay)) return [];
 
       const now = new Date();
+      const minimumBookingTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
 
       return allSlots.filter((slot) => {
         const slotStart = zonedTimeToUtc(date, slot, hostTimezone);
         const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
 
-        // Filter out past times (if slot is today and has already passed)
-        if (slotStart <= now) return false;
+        // Require 24-hour advance booking (slot must be at least 24 hours in the future)
+        if (slotStart < minimumBookingTime) return false;
 
         // Slot is available only if it does NOT overlap any busy interval
         for (const busy of busyIntervals) {
