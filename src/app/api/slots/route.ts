@@ -3,7 +3,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
-import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { getGoogleCalendarClient, type GoogleCalendarLogger } from '@/lib/integrations/google-calendar';
 import { isPastDate } from '@/lib/utils/dates';
 import { slotLocks } from '@/lib/db/slot-locks';
 
@@ -154,7 +154,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Get availability from Google Calendar (fail closed: do not show slots if calendar is unavailable)
-    const calendar = getGoogleCalendarClient(googleCreds, calendarEmail);
+    const logger: GoogleCalendarLogger = async (entry) => {
+      try {
+        await db.insert(schema.integrationLogs).values({
+          ...entry,
+          provider: 'google_calendar'
+        });
+      } catch (e) {
+        console.error('Failed to log Google Calendar:', e);
+      }
+    };
+
+    const calendar = getGoogleCalendarClient(googleCreds, calendarEmail, logger);
     const availableSlotsFromCalendar = await calendar.getAvailability(
       date,
       allSlots,

@@ -16,6 +16,16 @@ export interface GoogleCredentials {
   client_x509_cert_url: string;
 }
 
+export type GoogleCalendarLogger = (entry: {
+  endpoint: string;
+  method: string;
+  status?: number;
+  requestBody?: string;
+  responseBody?: string;
+  errorMessage?: string;
+  duration?: number;
+}) => Promise<void>;
+
 export interface CalendarEvent {
   id?: string;
   htmlLink?: string;
@@ -42,10 +52,12 @@ export class GoogleCalendarClient {
   private targetEmail: string;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  private logger?: GoogleCalendarLogger;
 
-  constructor(credentials: GoogleCredentials, targetEmail: string) {
+  constructor(credentials: GoogleCredentials, targetEmail: string, logger?: GoogleCalendarLogger) {
     this.credentials = credentials;
     this.targetEmail = targetEmail;
+    this.logger = logger;
   }
 
   /**
@@ -157,25 +169,56 @@ export class GoogleCalendarClient {
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
     body?: unknown
   ): Promise<unknown> {
-    const token = await this.getAccessToken();
-    
-    const response = await fetch(`https://www.googleapis.com/calendar/v3${endpoint}`, {
-      method,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const startTime = Date.now();
+    let status: number | undefined;
+    let responseData: unknown;
+    let errorMsg: string | undefined;
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('Google Calendar API error:', data);
-      throw new Error(data.error?.message || 'Google Calendar API error');
+    try {
+      const token = await this.getAccessToken();
+      
+      const response = await fetch(`https://www.googleapis.com/calendar/v3${endpoint}`, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      status = response.status;
+      const text = await response.text();
+      
+      try {
+        responseData = text ? JSON.parse(text) : {};
+      } catch {
+        responseData = { text };
+      }
+      
+      if (!response.ok) {
+        console.error('Google Calendar API error:', responseData);
+        errorMsg = (responseData as any).error?.message || 'Google Calendar API error';
+        throw new Error(errorMsg);
+      }
+
+      return responseData;
+    } catch (error: any) {
+      errorMsg = error.message;
+      throw error;
+    } finally {
+      if (this.logger) {
+        const duration = Date.now() - startTime;
+        this.logger({
+          endpoint,
+          method,
+          status,
+          requestBody: body ? JSON.stringify(body) : undefined,
+          responseBody: JSON.stringify(responseData),
+          errorMessage: errorMsg,
+          duration
+        }).catch(e => console.error('Failed to log Google Calendar request:', e));
+      }
     }
-
-    return data;
   }
 
   /**
@@ -399,10 +442,11 @@ export class GoogleCalendarClient {
  */
 export function getGoogleCalendarClient(
   credentialsJson: string,
-  targetEmail: string
+  targetEmail: string,
+  logger?: GoogleCalendarLogger
 ): GoogleCalendarClient {
   const credentials = JSON.parse(credentialsJson) as GoogleCredentials;
-  return new GoogleCalendarClient(credentials, targetEmail);
+  return new GoogleCalendarClient(credentials, targetEmail, logger);
 }
 
 /**

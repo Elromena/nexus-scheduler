@@ -7,7 +7,7 @@ import * as schema from '@/lib/db/schema';
 import { validateBooking } from '@/lib/utils/validation';
 import { toISODateTime } from '@/lib/utils/dates';
 import { getHubSpotClient, type HubSpotLogger } from '@/lib/integrations/hubspot';
-import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { getGoogleCalendarClient, type GoogleCalendarLogger } from '@/lib/integrations/google-calendar';
 import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
@@ -130,7 +130,18 @@ export async function POST(request: NextRequest) {
       }
 
       // Then verify against the host's Google Calendar (includes external meetings)
-      const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail);
+      const calendarLogger: GoogleCalendarLogger = async (entry) => {
+        try {
+          await db.insert(schema.integrationLogs).values({
+            ...entry,
+            provider: 'google_calendar'
+          });
+        } catch (e) {
+          console.error('Failed to log Google Calendar:', e);
+        }
+      };
+      
+      const calendar = getGoogleCalendarClient(env.GOOGLE_SERVICE_ACCOUNT, calendarEmail, calendarLogger);
       try {
         const isAvailable = await calendar.isSlotAvailable(
           validData.date,
@@ -197,9 +208,12 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
         try {
           const logger: HubSpotLogger = async (entry) => {
             try {
-              await db.insert(schema.hubspotLogs).values(entry);
+              await db.insert(schema.integrationLogs).values({
+                ...entry,
+                provider: 'hubspot'
+              });
             } catch (e) {
-              console.error('Failed to write to hubspot_logs:', e);
+              console.error('Failed to write to integration_logs:', e);
             }
           };
 

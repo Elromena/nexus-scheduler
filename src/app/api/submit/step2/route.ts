@@ -46,9 +46,12 @@ export async function POST(request: NextRequest) {
       try {
         const logger: HubSpotLogger = async (entry) => {
           try {
-            await db.insert(schema.hubspotLogs).values(entry);
+            await db.insert(schema.integrationLogs).values({
+              ...entry,
+              provider: 'hubspot'
+            });
           } catch (e) {
-            console.error('Failed to write to hubspot_logs:', e);
+            console.error('Failed to write to integration_logs:', e);
           }
         };
 
