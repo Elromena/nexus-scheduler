@@ -50,31 +50,56 @@ export default function StepDetails({
     setError(null);
 
     try {
+      const payload = {
+        data: {
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          email: formData.email.trim().toLowerCase(),
+          website: formData.website.trim(),
+          industry: formData.industry,
+          heardFrom: formData.heardFrom,
+        },
+        visitorId,
+      };
+
       const response = await fetch('/scheduler/api/submit/step1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: {
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            website: formData.website,
-            industry: formData.industry,
-            heardFrom: formData.heardFrom,
-          },
-          visitorId,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      // Handle network errors
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          throw new Error(`Server error (${response.status})`);
+        }
+        
+        // Show validation errors if present
+        if (errorData.errors) {
+          const fieldErrors = Object.entries(errorData.errors)
+            .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(', ')}`)
+            .join('; ');
+          throw new Error(fieldErrors || 'Validation failed');
+        }
+        
+        throw new Error(errorData.error || errorData.details || `Server error (${response.status})`);
+      }
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to submit');
+      if (!result.success) {
+        throw new Error(result.error || result.details || 'Failed to submit');
       }
 
       onComplete(result.data.hubspotId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.common.error);
+      console.error('Step 1 submit error:', err);
+      const errorMessage = err instanceof Error ? err.message : t.common.error;
+      setError(errorMessage);
       setIsSubmitting(false);
     }
   };

@@ -7,11 +7,14 @@ import { validateStep1 } from '@/lib/utils/validation';
 import { getHubSpotClient, type HubSpotLogger } from '@/lib/integrations/hubspot';
 
 export async function POST(request: NextRequest) {
+  let step = 'init';
   try {
+    step = 'parsing request';
     const body = await request.json();
     const { data, visitorId } = body;
 
     // Validate step 1 data
+    step = 'validating data';
     const validation = validateStep1(data);
     if (!validation.success) {
       return NextResponse.json(
@@ -21,29 +24,36 @@ export async function POST(request: NextRequest) {
     }
 
     const validData = validation.data;
+    
+    step = 'getting cloudflare context';
     const { env } = getCloudflareContext();
+    
+    step = 'connecting to database';
     const db = drizzle(env.DB, { schema });
 
     // Check if test mode - ONLY from database setting
-    const testModeSetting = await db
-      .select()
-      .from(schema.settings)
-      .where(eq(schema.settings.key, 'test_mode'))
-      .get();
-
-    // Use DB setting only (defaults to false if not set)
-    const isTestMode = testModeSetting?.value === 'true';
+    step = 'checking test mode';
+    let isTestMode = false;
+    try {
+      const testModeSetting = await db
+        .select()
+        .from(schema.settings)
+        .where(eq(schema.settings.key, 'test_mode'))
+        .get();
+      isTestMode = testModeSetting?.value === 'true';
+    } catch (dbError) {
+      console.error('Failed to read test_mode setting:', dbError);
+      // Continue with test mode = false
+    }
     
     if (env.DEBUG_LOGGING === 'true') {
-      console.log('Test mode check:', {
-        dbSetting: testModeSetting?.value,
-        effectiveTestMode: isTestMode,
-      });
+      console.log('Test mode:', isTestMode);
     }
 
     let hubspotContactId = `test-${Date.now()}`;
 
     // Create/update contact in HubSpot
+    step = 'hubspot integration';
     if (!isTestMode && env.HUBSPOT_ACCESS_TOKEN) {
       try {
         const logger: HubSpotLogger = async (entry) => {
@@ -78,21 +88,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Track the form event
+    // Track the form event - wrapped in try/catch to not fail the main request
+    step = 'tracking form event';
     if (visitorId) {
-      await db.insert(schema.formEvents).values({
-        id: `fe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        visitorId,
-        sessionId: null,
-        eventType: 'step_completed',
-        step: 1,
-        timestamp: new Date().toISOString(),
-        metadata: JSON.stringify({
-          email: validData.email,
-          industry: validData.industry,
-          heardFrom: validData.heardFrom,
-        }),
-      });
+      try {
+        await db.insert(schema.formEvents).values({
+          id: `fe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          visitorId,
+          sessionId: null,
+          eventType: 'step_completed',
+          step: 1,
+          timestamp: new Date().toISOString(),
+          metadata: JSON.stringify({
+            email: validData.email,
+            industry: validData.industry,
+            heardFrom: validData.heardFrom,
+          }),
+        });
+      } catch (trackError) {
+        // Don't fail the request if tracking fails
+        console.error('Failed to track form event:', trackError);
+      }
     }
 
     return NextResponse.json({
@@ -104,9 +120,11 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Step 1 error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error(`Step 1 error at "${step}":`, errorMessage, errorStack);
     return NextResponse.json(
-      { success: false, error: 'Failed to process step 1' },
+      { success: false, error: `Failed to process step 1 (${step})`, details: errorMessage },
       { status: 500 }
     );
   }

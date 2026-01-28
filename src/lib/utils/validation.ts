@@ -2,10 +2,23 @@ import { z } from 'zod';
 
 // Step 1 validation schema
 export const step1Schema = z.object({
-  firstName: z.string().min(1, 'First name is required').max(50),
-  lastName: z.string().min(1, 'Last name is required').max(50),
+  firstName: z.string().min(1, 'First name is required').max(100),
+  lastName: z.string().min(1, 'Last name is required').max(100),
   email: z.string().email('Invalid email address'),
-  website: z.string().url('Invalid website URL').or(z.string().regex(/^[\w-]+\.[\w.-]+/, 'Invalid website')),
+  // More permissive website validation - accepts URLs or domain names
+  website: z.string().min(1, 'Website is required').refine((val) => {
+    // Accept URLs with protocol
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+      try {
+        new URL(val);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    // Accept domain-like strings (e.g., example.com, sub.example.co.uk)
+    return /^[\w-]+(\.[\w-]+)+/.test(val);
+  }, 'Please enter a valid website'),
   industry: z.string().min(1, 'Please select an industry'),
   heardFrom: z.string().min(1, 'Please tell us where you heard about us'),
 });
