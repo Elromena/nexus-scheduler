@@ -103,8 +103,13 @@ export class HubSpotClient {
       errorMsg = error.message;
       throw error;
     } finally {
+      const duration = Date.now() - startTime;
+      
+      // Always log to console for immediate debugging
+      console.log(`[HubSpot] ${method} ${endpoint} (${status}) - ${duration}ms`);
+      if (errorMsg) console.error(`[HubSpot Error]`, errorMsg);
+
       if (this.logger) {
-        const duration = Date.now() - startTime;
         this.logger({
           endpoint,
           method,

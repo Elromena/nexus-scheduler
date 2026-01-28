@@ -206,8 +206,13 @@ export class GoogleCalendarClient {
       errorMsg = error.message;
       throw error;
     } finally {
+      const duration = Date.now() - startTime;
+      
+      // Always log to console for immediate debugging
+      console.log(`[GoogleCal] ${method} ${endpoint} (${status}) - ${duration}ms`);
+      if (errorMsg) console.error(`[GoogleCal Error]`, errorMsg);
+
       if (this.logger) {
-        const duration = Date.now() - startTime;
         this.logger({
           endpoint,
           method,
