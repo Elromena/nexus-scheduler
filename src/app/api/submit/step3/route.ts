@@ -327,8 +327,22 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
           }),
         });
       } catch (trackError) {
-        // Don't fail the booking if tracking fails
-        console.error('Failed to track form event:', trackError);
+        // Don't fail the booking if tracking fails, but log it
+        const errorMsg = trackError instanceof Error ? trackError.message : 'Unknown error';
+        console.error('Failed to track form event (step 3):', errorMsg);
+        // Log to integration_logs so it's visible in admin
+        try {
+          await db.insert(schema.integrationLogs).values({
+            provider: 'analytics',
+            endpoint: 'formEvents/step3',
+            method: 'INSERT',
+            status: 500,
+            requestBody: JSON.stringify({ visitorId, bookingId, step: 3 }),
+            errorMessage: errorMsg,
+          });
+        } catch {
+          // Last resort - just console log
+        }
       }
     }
 

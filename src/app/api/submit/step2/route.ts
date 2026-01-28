@@ -97,8 +97,22 @@ export async function POST(request: NextRequest) {
           }),
         });
       } catch (trackError) {
-        // Don't fail the request if tracking fails
-        console.error('Failed to track form event:', trackError);
+        // Don't fail the request if tracking fails, but log it
+        const errorMsg = trackError instanceof Error ? trackError.message : 'Unknown error';
+        console.error('Failed to track form event (step 2):', errorMsg);
+        // Log to integration_logs so it's visible in admin
+        try {
+          await db.insert(schema.integrationLogs).values({
+            provider: 'analytics',
+            endpoint: 'formEvents/step2',
+            method: 'INSERT',
+            status: 500,
+            requestBody: JSON.stringify({ visitorId, step: 2 }),
+            errorMessage: errorMsg,
+          });
+        } catch {
+          // Last resort - just console log
+        }
       }
     }
 

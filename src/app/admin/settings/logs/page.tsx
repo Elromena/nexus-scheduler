@@ -66,6 +66,7 @@ export default function LogsPage() {
     { id: 'hubspot', label: 'HubSpot' },
     { id: 'google_calendar', label: 'Google Calendar' },
     { id: 'resend', label: 'Email (Resend)' },
+    { id: 'analytics', label: 'Analytics' },
   ];
 
   return (
