@@ -31,7 +31,7 @@ export default function LogsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/logs?provider=${activeTab}`);
+      const res = await fetch(`/scheduler/api/admin/logs?provider=${activeTab}`);
       const text = await res.text();
       console.log('[Logs] Raw response:', text);
       
