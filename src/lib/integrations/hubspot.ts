@@ -43,12 +43,24 @@ interface HubSpotResponse {
   message?: string;
 }
 
+export type HubSpotLogger = (entry: {
+  endpoint: string;
+  method: string;
+  status?: number;
+  requestBody?: string;
+  responseBody?: string;
+  errorMessage?: string;
+  duration?: number;
+}) => Promise<void>;
+
 export class HubSpotClient {
   private token: string;
   private baseUrl = 'https://api.hubapi.com/crm/v3';
+  private logger?: HubSpotLogger;
 
-  constructor(token: string) {
+  constructor(token: string, logger?: HubSpotLogger) {
     this.token = token;
+    this.logger = logger;
   }
 
   private async request(
@@ -56,23 +68,54 @@ export class HubSpotClient {
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
     body?: unknown
   ): Promise<HubSpotResponse> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.token}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const startTime = Date.now();
+    let status: number | undefined;
+    let responseData: unknown;
+    let errorMsg: string | undefined;
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('HubSpot API error:', data);
-      throw new Error(data.message || 'HubSpot API error');
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      status = response.status;
+      const text = await response.text();
+      
+      try {
+        responseData = text ? JSON.parse(text) : {};
+      } catch {
+        responseData = { text };
+      }
+
+      if (!response.ok) {
+        console.error('HubSpot API error:', responseData);
+        errorMsg = (responseData as any).message || 'HubSpot API error';
+        throw new Error(errorMsg);
+      }
+
+      return responseData as HubSpotResponse;
+    } catch (error: any) {
+      errorMsg = error.message;
+      throw error;
+    } finally {
+      if (this.logger) {
+        const duration = Date.now() - startTime;
+        this.logger({
+          endpoint,
+          method,
+          status,
+          requestBody: body ? JSON.stringify(body) : undefined,
+          responseBody: JSON.stringify(responseData),
+          errorMessage: errorMsg,
+          duration
+        }).catch(e => console.error('Failed to log HubSpot request:', e));
+      }
     }
-
-    return data;
   }
 
   /**
@@ -268,6 +311,6 @@ ${meetingData.meetLink ? `Join Meeting: ${meetingData.meetLink}` : ''}`;
 /**
  * Get HubSpot client instance
  */
-export function getHubSpotClient(token: string): HubSpotClient {
-  return new HubSpotClient(token);
+export function getHubSpotClient(token: string, logger?: HubSpotLogger): HubSpotClient {
+  return new HubSpotClient(token, logger);
 }

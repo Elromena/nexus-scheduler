@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as schema from '@/lib/db/schema';
 import { validateBooking } from '@/lib/utils/validation';
 import { toISODateTime } from '@/lib/utils/dates';
-import { getHubSpotClient } from '@/lib/integrations/hubspot';
+import { getHubSpotClient, type HubSpotLogger } from '@/lib/integrations/hubspot';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
 import { slotLocks } from '@/lib/db/slot-locks';
 
@@ -195,7 +195,15 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
       // HubSpot Integration
       if (env.HUBSPOT_ACCESS_TOKEN && hubspotId && !hubspotId.startsWith('test-')) {
         try {
-          const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN);
+          const logger: HubSpotLogger = async (entry) => {
+            try {
+              await db.insert(schema.hubspotLogs).values(entry);
+            } catch (e) {
+              console.error('Failed to write to hubspot_logs:', e);
+            }
+          };
+
+          const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN, logger);
           const startTime = toISODateTime(validData.date, validData.time);
           const endTime = toISODateTime(validData.date, validData.time, 30);
 

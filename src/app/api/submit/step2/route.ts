@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 import { validateStep2 } from '@/lib/utils/validation';
-import { getHubSpotClient } from '@/lib/integrations/hubspot';
+import { getHubSpotClient, type HubSpotLogger } from '@/lib/integrations/hubspot';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +44,15 @@ export async function POST(request: NextRequest) {
     // Update HubSpot contact
     if (!isTestMode && env.HUBSPOT_ACCESS_TOKEN && hubspotId && !hubspotId.startsWith('test-')) {
       try {
-        const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN);
+        const logger: HubSpotLogger = async (entry) => {
+          try {
+            await db.insert(schema.hubspotLogs).values(entry);
+          } catch (e) {
+            console.error('Failed to write to hubspot_logs:', e);
+          }
+        };
+
+        const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN, logger);
         
         await hubspot.updateContact(hubspotId, {
           what_is_the_goal_for_your_company_brand_main: validData.objective,

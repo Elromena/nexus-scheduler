@@ -218,6 +218,25 @@ export const slotLocks = sqliteTable('slot_locks', {
   slotUniqueIdx: index('uidx_slot_locks_date_time').on(table.scheduledDate, table.scheduledTime),
 }));
 
+// =============================================
+// HUBSPOT LOGS TABLE
+// Debugging HubSpot API requests/responses
+// =============================================
+export const hubspotLogs = sqliteTable('hubspot_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  timestamp: text('timestamp').default(sql`CURRENT_TIMESTAMP`),
+  endpoint: text('endpoint').notNull(),
+  method: text('method').notNull(),
+  status: integer('status'),
+  requestBody: text('request_body'),
+  responseBody: text('response_body'),
+  errorMessage: text('error_message'),
+  duration: integer('duration'), // ms
+}, (table) => ({
+  timestampIdx: index('idx_hubspot_logs_timestamp').on(table.timestamp),
+  statusIdx: index('idx_hubspot_logs_status').on(table.status),
+}));
+
 // Type exports
 export type Visitor = typeof visitors.$inferSelect;
 export type NewVisitor = typeof visitors.$inferInsert;
@@ -235,3 +254,5 @@ export type VerificationCode = typeof verificationCodes.$inferSelect;
 export type NewVerificationCode = typeof verificationCodes.$inferInsert;
 export type SlotLock = typeof slotLocks.$inferSelect;
 export type NewSlotLock = typeof slotLocks.$inferInsert;
+export type HubSpotLog = typeof hubspotLogs.$inferSelect;
+export type NewHubSpotLog = typeof hubspotLogs.$inferInsert;
