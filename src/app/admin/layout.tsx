@@ -176,6 +176,19 @@ export default function AdminLayout({
             <span>⚙️</span>
             <span>Settings</span>
           </Link>
+
+          {/* Integration Logs */}
+          <Link
+            href="/admin/settings/logs"
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              pathname === '/admin/settings/logs'
+                ? 'bg-primary-50 text-primary-700 font-medium'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <span>📝</span>
+            <span>Integration Logs</span>
+          </Link>
         </nav>
 
         <div className="absolute bottom-6 left-6 right-6">

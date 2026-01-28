@@ -20,6 +20,7 @@ export default function LogsPage() {
   const [activeTab, setActiveTab] = useState('hubspot');
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<Log | null>(null);
 
   useEffect(() => {
@@ -28,14 +29,34 @@ export default function LogsPage() {
 
   const fetchLogs = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/admin/logs?provider=${activeTab}`);
-      const data = await res.json();
-      if (data.success) {
-        setLogs(data.logs);
+      const text = await res.text();
+      console.log('[Logs] Raw response:', text);
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setError(`Invalid JSON response: ${text.substring(0, 100)}`);
+        return;
       }
-    } catch (error) {
-      console.error('Failed to fetch logs:', error);
+      
+      if (!res.ok) {
+        setError(`API error: ${res.status} - ${data.error || 'Unknown error'}`);
+        return;
+      }
+      
+      if (data.success) {
+        console.log('[Logs] Received', data.logs?.length, 'logs');
+        setLogs(data.logs || []);
+      } else {
+        setError(data.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Failed to fetch logs:', err);
+      setError(err instanceof Error ? err.message : 'Network error');
     } finally {
       setLoading(false);
     }
@@ -89,8 +110,24 @@ export default function LogsPage() {
         <div className="w-1/2 overflow-auto bg-white shadow rounded-lg">
           {loading ? (
             <div className="p-8 text-center text-gray-500">Loading logs...</div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <div className="text-red-600 font-medium mb-2">Error loading logs</div>
+              <div className="text-red-500 text-sm">{error}</div>
+              <button 
+                onClick={fetchLogs}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Retry
+              </button>
+            </div>
           ) : logs.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No logs found for {tabs.find(t => t.id === activeTab)?.label}.</div>
+            <div className="p-8 text-center text-gray-500">
+              No logs found for {tabs.find(t => t.id === activeTab)?.label}.
+              <div className="text-xs mt-2 text-gray-400">
+                Logs are recorded when API calls are made to integrations.
+              </div>
+            </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0">
