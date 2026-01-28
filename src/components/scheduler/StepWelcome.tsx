@@ -1,10 +1,14 @@
 'use client';
 
+import { useTranslation } from '@/lib/i18n/TranslationContext';
+
 interface StepWelcomeProps {
   onStart: () => void;
 }
 
 export default function StepWelcome({ onStart }: StepWelcomeProps) {
+  const { translations: t } = useTranslation();
+
   return (
     <div className="text-center animate-fade-in">
       {/* Logo */}
@@ -21,21 +25,20 @@ export default function StepWelcome({ onStart }: StepWelcomeProps) {
       
       {/* Heading */}
       <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-4">
-        Get Verified & Access Blockchain-Ads
+        {t.welcome.title}
       </h1>
       
       {/* Description */}
       <div className="text-left max-w-md mx-auto mb-8 text-slate-600 space-y-4">
         <p>
-          Access is limited to verified advertisers only that schedule and pass the qualification. 
-          Compliance checks and budget thresholds apply.
+          {t.welcome.description}
         </p>
         
         <div>
-          <p className="font-semibold text-slate-700 mb-2">This call will:</p>
+          <p className="font-semibold text-slate-700 mb-2">{t.welcome.callWill}</p>
           <ul className="list-disc list-inside space-y-1 text-slate-600">
-            <li>Confirm your campaign goals</li>
-            <li>Determine eligibility for access</li>
+            <li>{t.welcome.confirmGoals}</li>
+            <li>{t.welcome.determineEligibility}</li>
           </ul>
         </div>
       </div>
@@ -45,7 +48,7 @@ export default function StepWelcome({ onStart }: StepWelcomeProps) {
         onClick={onStart}
         className="btn-primary max-w-xs mx-auto"
       >
-        Get Verified
+        {t.welcome.cta}
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
         </svg>

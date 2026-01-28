@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/lib/i18n/TranslationContext';
 import type { FormData } from '@/app/page';
 
 interface StepDetailsProps {
@@ -11,26 +12,6 @@ interface StepDetailsProps {
   onBack: () => void;
 }
 
-const industries = [
-  'Finance & Fintech',
-  'Gaming',
-  'SaaS & Tech',
-  'AI & Emerging Tech',
-  'Blockchain & Crypto',
-  'iGaming',
-  'Regulated Industries',
-  'Other',
-];
-
-const sources = [
-  'Google/Search Engines',
-  'Social Media (LinkedIn, Twitter/X)',
-  'ChatGPT/Perplexity (Other AI Tools)',
-  'Another Website/Third Party Article',
-  'Friend or Colleague Referral',
-  'Other',
-];
-
 export default function StepDetails({
   formData,
   updateFormData,
@@ -38,8 +19,30 @@ export default function StepDetails({
   onComplete,
   onBack,
 }: StepDetailsProps) {
+  const { translations: t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Map translation keys to original values for API
+  const industries = [
+    { key: 'financeFintech', value: 'Finance & Fintech' },
+    { key: 'gaming', value: 'Gaming' },
+    { key: 'saasTech', value: 'SaaS & Tech' },
+    { key: 'aiTech', value: 'AI & Emerging Tech' },
+    { key: 'blockchainCrypto', value: 'Blockchain & Crypto' },
+    { key: 'iGaming', value: 'iGaming' },
+    { key: 'regulated', value: 'Regulated Industries' },
+    { key: 'other', value: 'Other' },
+  ];
+
+  const sources = [
+    { key: 'google', value: 'Google/Search Engines' },
+    { key: 'social', value: 'Social Media (LinkedIn, Twitter/X)' },
+    { key: 'ai', value: 'ChatGPT/Perplexity (Other AI Tools)' },
+    { key: 'website', value: 'Another Website/Third Party Article' },
+    { key: 'referral', value: 'Friend or Colleague Referral' },
+    { key: 'other', value: 'Other' },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +74,7 @@ export default function StepDetails({
 
       onComplete(result.data.hubspotId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(err instanceof Error ? err.message : t.common.error);
       setIsSubmitting(false);
     }
   };
@@ -82,7 +85,7 @@ export default function StepDetails({
         {/* Name row */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="form-label">First name</label>
+            <label className="form-label">{t.details.firstName}</label>
             <input
               type="text"
               className="form-input"
@@ -92,7 +95,7 @@ export default function StepDetails({
             />
           </div>
           <div>
-            <label className="form-label">Last name</label>
+            <label className="form-label">{t.details.lastName}</label>
             <input
               type="text"
               className="form-input"
@@ -105,7 +108,7 @@ export default function StepDetails({
 
         {/* Email */}
         <div className="form-group">
-          <label className="form-label">Your email address</label>
+          <label className="form-label">{t.details.email}</label>
           <input
             type="email"
             className="form-input"
@@ -117,11 +120,11 @@ export default function StepDetails({
 
         {/* Website */}
         <div className="form-group">
-          <label className="form-label">Website URL</label>
+          <label className="form-label">{t.details.website}</label>
           <input
             type="text"
             className="form-input"
-            placeholder="https://"
+            placeholder={t.details.websitePlaceholder}
             value={formData.website}
             onChange={(e) => updateFormData({ website: e.target.value })}
             required
@@ -131,30 +134,34 @@ export default function StepDetails({
         {/* Industry & Source row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="form-label">What industry is the brand in?</label>
+            <label className="form-label">{t.details.industry}</label>
             <select
               className="form-select"
               value={formData.industry}
               onChange={(e) => updateFormData({ industry: e.target.value })}
               required
             >
-              <option value="" disabled>Select...</option>
+              <option value="" disabled>{t.details.select}</option>
               {industries.map((industry) => (
-                <option key={industry} value={industry}>{industry}</option>
+                <option key={industry.key} value={industry.value}>
+                  {t.industries[industry.key as keyof typeof t.industries]}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="form-label">Where did you first hear about us?</label>
+            <label className="form-label">{t.details.heardFrom}</label>
             <select
               className="form-select"
               value={formData.heardFrom}
               onChange={(e) => updateFormData({ heardFrom: e.target.value })}
               required
             >
-              <option value="" disabled>Select...</option>
+              <option value="" disabled>{t.details.select}</option>
               {sources.map((source) => (
-                <option key={source} value={source}>{source}</option>
+                <option key={source.key} value={source.value}>
+                  {t.sources[source.key as keyof typeof t.sources]}
+                </option>
               ))}
             </select>
           </div>
@@ -176,10 +183,10 @@ export default function StepDetails({
           {isSubmitting ? (
             <>
               <span className="spinner" />
-              Processing...
+              {t.details.processing}
             </>
           ) : (
-            'Continue'
+            t.details.continue
           )}
         </button>
       </form>

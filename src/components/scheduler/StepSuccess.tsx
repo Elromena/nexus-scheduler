@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/lib/i18n/TranslationContext';
 import type { FormData } from '@/app/page';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/utils/dates';
 
@@ -14,6 +15,8 @@ interface StepSuccessProps {
 }
 
 export default function StepSuccess({ formData, bookingResult }: StepSuccessProps) {
+  const { translations: t } = useTranslation();
+
   return (
     <div className="text-center animate-fade-in py-2">
       {/* Success icon */}
@@ -32,9 +35,9 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
       </div>
 
       {/* Heading */}
-      <h2 className="text-2xl font-bold text-slate-900 mb-2">Meeting Confirmed</h2>
+      <h2 className="text-2xl font-bold text-slate-900 mb-2">{t.success.title}</h2>
       <p className="text-sm text-slate-500 mb-8 max-w-[280px] mx-auto">
-        A calendar invitation has been sent to <span className="font-semibold text-slate-700">{formData.email}</span>.
+        {t.success.emailSent} <span className="font-semibold text-slate-700">{formData.email}</span>.
       </p>
 
       {/* Premium Booking Card */}
@@ -44,7 +47,7 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
         <div className="relative z-10 space-y-4">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Date & Time</p>
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">{t.success.dateTime}</p>
               <p className="text-sm font-bold text-slate-900">
                 {formatDisplayDate(bookingResult.scheduledDate)}
               </p>
@@ -53,7 +56,7 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Guest</p>
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">{t.success.guest}</p>
               <p className="text-sm font-bold text-slate-900">{formData.firstName} {formData.lastName}</p>
             </div>
           </div>
@@ -68,18 +71,18 @@ export default function StepSuccess({ formData, bookingResult }: StepSuccessProp
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-2 w-full py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
         >
-          See Success Stories
+          {t.success.seeStories}
         </a>
 
         <a
           href="/scheduler/manage"
           className="w-full py-4 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] flex items-center justify-center"
         >
-          Manage my booking
+          {t.success.manageBooking}
         </a>
         
         <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-          Need to change? Reschedule or cancel anytime from <br/>your confirmation email.
+          {t.success.needChange}
         </p>
       </div>
     </div>

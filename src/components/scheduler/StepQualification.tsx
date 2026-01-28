@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/lib/i18n/TranslationContext';
 import type { FormData } from '@/app/page';
 
 interface StepQualificationProps {
@@ -12,25 +13,6 @@ interface StepQualificationProps {
   onBack: () => void;
 }
 
-const objectives = [
-  'Brand Awareness',
-  'Website Traffic',
-  'Downloads/Sign Ups',
-  'Sales/Deposits',
-];
-
-const budgets = [
-  '500K+',
-  '100K-500K',
-  '10K-100K',
-];
-
-const roles = [
-  { value: 'brandadvertiser', label: 'Brand/Advertiser' },
-  { value: 'marketing_agency', label: 'Marketing Agency' },
-  { value: 'affiliate', label: 'Affiliate' },
-];
-
 export default function StepQualification({
   formData,
   updateFormData,
@@ -39,8 +21,28 @@ export default function StepQualification({
   onComplete,
   onBack,
 }: StepQualificationProps) {
+  const { translations: t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const objectives = [
+    { key: 'brandAwareness', value: 'Brand Awareness' },
+    { key: 'websiteTraffic', value: 'Website Traffic' },
+    { key: 'downloads', value: 'Downloads/Sign Ups' },
+    { key: 'sales', value: 'Sales/Deposits' },
+  ];
+
+  const budgets = [
+    { key: 'high', value: '500K+' },
+    { key: 'medium', value: '100K-500K' },
+    { key: 'low', value: '10K-100K' },
+  ];
+
+  const roles = [
+    { key: 'brand', value: 'brandadvertiser', label: 'brand' },
+    { key: 'agency', value: 'marketing_agency', label: 'agency' },
+    { key: 'affiliate', value: 'affiliate', label: 'affiliate' },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +72,7 @@ export default function StepQualification({
 
       onComplete();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(err instanceof Error ? err.message : t.common.error);
       setIsSubmitting(false);
     }
   };
@@ -81,30 +83,34 @@ export default function StepQualification({
         {/* Objective & Budget row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="form-label">What is the goal for your company/brand?</label>
+            <label className="form-label">{t.qualification.goal}</label>
             <select
               className="form-select"
               value={formData.objective}
               onChange={(e) => updateFormData({ objective: e.target.value })}
               required
             >
-              <option value="" disabled>Select...</option>
+              <option value="" disabled>{t.details.select}</option>
               {objectives.map((obj) => (
-                <option key={obj} value={obj}>{obj}</option>
+                <option key={obj.key} value={obj.value}>
+                  {t.objectives[obj.key as keyof typeof t.objectives]}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="form-label">Your advertising budget</label>
+            <label className="form-label">{t.qualification.budget}</label>
             <select
               className="form-select"
               value={formData.budget}
               onChange={(e) => updateFormData({ budget: e.target.value })}
               required
             >
-              <option value="" disabled>Select...</option>
+              <option value="" disabled>{t.details.select}</option>
               {budgets.map((budget) => (
-                <option key={budget} value={budget}>{budget}</option>
+                <option key={budget.key} value={budget.value}>
+                  {t.budgets[budget.key as keyof typeof t.budgets]}
+                </option>
               ))}
             </select>
           </div>
@@ -112,16 +118,18 @@ export default function StepQualification({
 
         {/* Role */}
         <div className="form-group">
-          <label className="form-label">How would you best describe yourself?</label>
+          <label className="form-label">{t.qualification.role}</label>
           <select
             className="form-select"
             value={formData.roleType}
             onChange={(e) => updateFormData({ roleType: e.target.value })}
             required
           >
-            <option value="" disabled>Select...</option>
+            <option value="" disabled>{t.details.select}</option>
             {roles.map((role) => (
-              <option key={role.value} value={role.value}>{role.label}</option>
+              <option key={role.key} value={role.value}>
+                {t.roles[role.label as keyof typeof t.roles]}
+              </option>
             ))}
           </select>
         </div>
@@ -140,7 +148,7 @@ export default function StepQualification({
             onClick={onBack}
             className="btn-secondary"
           >
-            Back
+            {t.qualification.back}
           </button>
           <button
             type="submit"
@@ -150,10 +158,10 @@ export default function StepQualification({
             {isSubmitting ? (
               <>
                 <span className="spinner" />
-                Processing...
+                {t.qualification.processing}
               </>
             ) : (
-              'Continue'
+              t.qualification.continue
             )}
           </button>
         </div>

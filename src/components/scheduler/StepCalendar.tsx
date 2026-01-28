@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from '@/lib/i18n/TranslationContext';
 import type { FormData } from '@/app/page';
-import { getMonthDates, getMonthName, isPastDate, formatDate } from '@/lib/utils/dates';
+import { getMonthDates, isPastDate, formatDate } from '@/lib/utils/dates';
 
 interface CalendarConfig {
   availableDays: number[]; // 0=Sun, 1=Mon, etc.
@@ -35,6 +36,7 @@ export default function StepCalendar({
   onComplete,
   onBack,
 }: StepCalendarProps) {
+  const { translations: t, locale } = useTranslation();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -49,6 +51,18 @@ export default function StepCalendar({
     blockedDates: [],
     hostTimezone: 'UTC',
   });
+
+  // Day names from translations
+  const dayNames = [
+    t.days.su, t.days.mo, t.days.tu, t.days.we, t.days.th, t.days.fr, t.days.sa
+  ];
+
+  // Month names from translations
+  const monthNames = [
+    t.months.january, t.months.february, t.months.march, t.months.april,
+    t.months.may, t.months.june, t.months.july, t.months.august,
+    t.months.september, t.months.october, t.months.november, t.months.december
+  ];
 
   // Fetch calendar config on mount
   useEffect(() => {
@@ -68,7 +82,6 @@ export default function StepCalendar({
   }, []);
 
   const monthDates = getMonthDates(viewDate.getFullYear(), viewDate.getMonth());
-  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     setViewDate(prev => {
@@ -105,7 +118,7 @@ export default function StepCalendar({
 
       setAvailableSlots(result.slots || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load time slots');
+      setError(err instanceof Error ? err.message : t.common.error);
     } finally {
       setIsLoadingSlots(false);
     }
@@ -137,17 +150,25 @@ export default function StepCalendar({
       const localDate = new Date(isoWithOffset);
 
       // Return a 2-line format for the grid: Time + AM/PM
-      const timeStr = localDate.toLocaleTimeString([], {
+      const timeStr = localDate.toLocaleTimeString(locale === 'en' ? [] : locale, {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true
+        hour12: locale === 'en' || locale === 'es'
       });
 
-      const [time, period] = timeStr.split(' ');
+      if (locale === 'en' || locale === 'es') {
+        const [time, period] = timeStr.split(' ');
+        return (
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-bold">{time}</span>
+            <span className="text-[10px] uppercase opacity-60 font-semibold">{period}</span>
+          </div>
+        );
+      }
+      
       return (
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-bold">{time}</span>
-          <span className="text-[10px] uppercase opacity-60 font-semibold">{period}</span>
+          <span className="text-sm font-bold">{timeStr}</span>
         </div>
       );
     } catch (e) {
@@ -158,9 +179,11 @@ export default function StepCalendar({
   const handleConfirmBooking = async () => {
     if (!formData.date || !formData.time) return;
 
-    const confirmed = window.confirm(
-      `Confirm your verification call for ${formData.date} at ${formData.time}?`
-    );
+    const confirmMessage = t.calendar.confirmPrompt
+      .replace('{date}', formData.date)
+      .replace('{time}', formData.time);
+    
+    const confirmed = window.confirm(confirmMessage);
 
     if (!confirmed) return;
 
@@ -186,7 +209,7 @@ export default function StepCalendar({
 
       onComplete(result.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(err instanceof Error ? err.message : t.common.error);
       setIsSubmitting(false);
     }
   };
@@ -212,9 +235,9 @@ export default function StepCalendar({
     <div className="animate-slide-in">
       {/* Header */}
       <div className="mb-6 pb-4 border-b border-slate-100">
-        <h2 className="text-xl font-bold text-slate-900">Pick a time for your call</h2>
+        <h2 className="text-xl font-bold text-slate-900">{t.calendar.title}</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Times are shown in your local timezone ({formData.timezone || 'UTC'})
+          {t.calendar.timezone} ({formData.timezone || 'UTC'})
         </p>
       </div>
 
@@ -225,7 +248,7 @@ export default function StepCalendar({
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-lg font-bold text-slate-900">
-              {getMonthName(viewDate.getMonth())} {viewDate.getFullYear()}
+              {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
             </span>
             <div className="flex gap-2">
               <button
@@ -282,27 +305,27 @@ export default function StepCalendar({
         <div>
           {!selectedDate && (
             <div className="text-center text-slate-400 py-8">
-              Select a date to view times
+              {t.calendar.selectDate}
             </div>
           )}
 
           {selectedDate && isLoadingSlots && (
             <div className="text-center text-slate-400 py-8">
               <span className="spinner inline-block border-slate-400 border-t-transparent" />
-              <span className="ml-2">Loading...</span>
+              <span className="ml-2">{t.calendar.loading}</span>
             </div>
           )}
 
           {selectedDate && !isLoadingSlots && availableSlots.length === 0 && (
             <div className="text-center text-slate-400 py-8">
-              No available slots for this date
+              {t.calendar.noSlots}
             </div>
           )}
 
           {selectedDate && !isLoadingSlots && availableSlots.length > 0 && (
             <>
               <div className="text-xs font-semibold uppercase text-slate-500 mb-3">
-                Available Times
+                {t.calendar.availableTimes}
               </div>
               <div className="time-slots">
                 {availableSlots.map(time => (
@@ -340,10 +363,10 @@ export default function StepCalendar({
             {isSubmitting ? (
               <>
                 <span className="spinner" />
-                Booking...
+                {t.calendar.booking}
               </>
             ) : (
-              `Confirm ${formData.date} at ${formData.time}`
+              `${t.calendar.confirm} ${formData.date} at ${formData.time}`
             )}
           </button>
         </div>
@@ -356,7 +379,7 @@ export default function StepCalendar({
           onClick={onBack}
           className="btn-secondary"
         >
-          Back
+          {t.calendar.back}
         </button>
       </div>
     </div>

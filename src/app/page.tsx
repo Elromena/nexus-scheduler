@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { TranslationProvider } from '@/lib/i18n/TranslationContext';
 import StepWelcome from '@/components/scheduler/StepWelcome';
 import StepDetails from '@/components/scheduler/StepDetails';
 import StepQualification from '@/components/scheduler/StepQualification';
@@ -168,56 +169,58 @@ export default function SchedulerPage() {
   };
 
   return (
-    <div className="scheduler-container">
-      <div className="scheduler-card animate-fade-in">
-        {/* Progress bar for steps 1-3 */}
-        {step > 0 && step < 4 && <ProgressBar currentStep={step} totalSteps={3} />}
-        
-        {/* Step content */}
-        {step === 0 && (
-          <StepWelcome onStart={() => goToStep(1)} />
-        )}
-        
-        {step === 1 && (
-          <StepDetails
-            formData={formData}
-            updateFormData={updateFormData}
-            visitorId={visitorId}
-            onComplete={handleStep1Complete}
-            onBack={() => goToStep(0)}
-          />
-        )}
-        
-        {step === 2 && (
-          <StepQualification
-            formData={formData}
-            updateFormData={updateFormData}
-            hubspotId={hubspotId}
-            visitorId={visitorId}
-            onComplete={handleStep2Complete}
-            onBack={() => goToStep(1)}
-          />
-        )}
-        
-        {step === 3 && (
-          <StepCalendar
-            formData={formData}
-            updateFormData={updateFormData}
-            hubspotId={hubspotId}
-            visitorId={visitorId}
-            onComplete={handleBookingComplete}
-            onBack={() => goToStep(2)}
-          />
-        )}
-        
-        {step === 4 && bookingResult && (
-          <StepSuccess
-            formData={formData}
-            bookingResult={bookingResult}
-          />
-        )}
+    <TranslationProvider>
+      <div className="scheduler-container">
+        <div className="scheduler-card animate-fade-in">
+          {/* Progress bar for steps 1-3 */}
+          {step > 0 && step < 4 && <ProgressBar currentStep={step} totalSteps={3} />}
+          
+          {/* Step content */}
+          {step === 0 && (
+            <StepWelcome onStart={() => goToStep(1)} />
+          )}
+          
+          {step === 1 && (
+            <StepDetails
+              formData={formData}
+              updateFormData={updateFormData}
+              visitorId={visitorId}
+              onComplete={handleStep1Complete}
+              onBack={() => goToStep(0)}
+            />
+          )}
+          
+          {step === 2 && (
+            <StepQualification
+              formData={formData}
+              updateFormData={updateFormData}
+              hubspotId={hubspotId}
+              visitorId={visitorId}
+              onComplete={handleStep2Complete}
+              onBack={() => goToStep(1)}
+            />
+          )}
+          
+          {step === 3 && (
+            <StepCalendar
+              formData={formData}
+              updateFormData={updateFormData}
+              hubspotId={hubspotId}
+              visitorId={visitorId}
+              onComplete={handleBookingComplete}
+              onBack={() => goToStep(2)}
+            />
+          )}
+          
+          {step === 4 && bookingResult && (
+            <StepSuccess
+              formData={formData}
+              bookingResult={bookingResult}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </TranslationProvider>
   );
 }
 
