@@ -177,13 +177,18 @@ export class HubSpotClient {
           to: { id: contactId },
           types: [{
             associationCategory: 'HUBSPOT_DEFINED',
-            associationTypeId: 194 // Contact to Meeting association
+            associationTypeId: 20 // Meeting to Contact association (Standard)
           }]
         }]
       });
+      console.log('HubSpot meeting created:', response.id);
       return response.id || null;
     } catch (error) {
       console.error('HubSpot create meeting error:', error);
+      // Log the full error details if available
+      if (error instanceof Error && 'cause' in error) {
+         console.error('Cause:', error.cause);
+      }
       return null;
     }
   }
