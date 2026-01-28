@@ -310,21 +310,26 @@ Reschedule or Cancel: https://www.blockchain-ads.com/scheduler/manage
       );
     }
 
-    // Track the form submission event
+    // Track the form submission event - wrapped in try/catch to not fail the booking
     if (visitorId) {
-      await db.insert(schema.formEvents).values({
-        id: `fe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        visitorId,
-        sessionId: null,
-        eventType: 'form_submitted',
-        step: 3,
-        timestamp: now,
-        metadata: JSON.stringify({
-          bookingId,
-          date: validData.date,
-          time: validData.time,
-        }),
-      });
+      try {
+        await db.insert(schema.formEvents).values({
+          id: `fe-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          visitorId,
+          sessionId: null,
+          eventType: 'form_submitted',
+          step: 3,
+          timestamp: now,
+          metadata: JSON.stringify({
+            bookingId,
+            date: validData.date,
+            time: validData.time,
+          }),
+        });
+      } catch (trackError) {
+        // Don't fail the booking if tracking fails
+        console.error('Failed to track form event:', trackError);
+      }
     }
 
     return NextResponse.json({
