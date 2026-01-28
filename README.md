@@ -8,16 +8,20 @@ A full-stack scheduler application with visitor analytics, booking management, a
 - **Multi-step booking form** — 3-step onboarding flow with calendar scheduling
 - **Manage bookings** — Users can reschedule or cancel via email verification
 - **Double-booking prevention** — Slot locks + real-time Google Calendar availability checks
+- **24-hour advance booking** — Slots must be at least 24 hours in the future
+- **Multi-language support** — 11 languages with automatic locale detection
 
 ### Integrations
 - **Google Calendar** — Check availability, create events with Google Meet links
 - **HubSpot CRM** — Create/update contacts, deals, and meeting engagements
+- **HubSpot Meeting Sync** — Cancel/reschedule updates HubSpot meeting outcomes
 - **Resend Email** — Verification codes for booking management
 
 ### Analytics & Admin
 - **Full attribution tracking** — Visitors, sessions, page views, UTM, referrers
 - **Admin dashboard** — Leads, analytics, funnel metrics, reports
 - **Exclude from analytics** — Hide test/internal bookings from reports
+- **Integration logs** — Debug HubSpot, Google Calendar, and Email API calls
 
 ### Infrastructure
 - **SQLite database** — Persistent storage via Cloudflare D1
@@ -152,6 +156,31 @@ Click "Publish" in the Webflow Designer to make changes live.
 | `/scheduler` | Main booking form (3-step flow) |
 | `/scheduler/manage` | Manage existing booking (reschedule/cancel) |
 
+### Multi-Language Support
+
+The scheduler supports **11 languages** with automatic locale detection:
+
+| Code | Language | URL Example |
+|------|----------|-------------|
+| `en` | English (default) | `/scheduler` |
+| `es` | Español | `/es/scheduler` or `?lang=es` |
+| `fr` | Français | `/fr/scheduler` or `?lang=fr` |
+| `de` | Deutsch | `/de/scheduler` or `?lang=de` |
+| `pt` | Português | `/pt/scheduler` or `?lang=pt` |
+| `ru` | Русский | `/ru/scheduler` or `?lang=ru` |
+| `zh` | 中文 | `/zh/scheduler` or `?lang=zh` |
+| `ja` | 日本語 | `/ja/scheduler` or `?lang=ja` |
+| `ko` | 한국어 | `/ko/scheduler` or `?lang=ko` |
+| `tr` | Türkçe | `/tr/scheduler` or `?lang=tr` |
+| `it` | Italiano | `/it/scheduler` or `?lang=it` |
+
+**Locale Detection Priority:**
+1. URL path prefix (e.g., `/es/scheduler`)
+2. Query parameter (e.g., `?lang=es`)
+3. Iframe parent URL (if embedded)
+4. Referrer URL
+5. Falls back to English
+
 ### Manage Booking Flow
 
 1. User enters their email at `/scheduler/manage`
@@ -178,6 +207,7 @@ Login with your `ADMIN_PASSWORD`.
 | **Analytics** | Conversion metrics, attribution breakdown |
 | **Reports** | Monthly trends, export to CSV |
 | **Settings** | Test mode, host settings, calendar config, integrations |
+| **Integration Logs** | Debug API calls to HubSpot, Google Calendar, Resend |
 
 ### Admin Features
 
@@ -313,6 +343,7 @@ nexus-scheduler/
 │   │   │   ├── analytics/              # Analytics page
 │   │   │   ├── reports/                # Reports page
 │   │   │   └── settings/               # Settings page
+│   │   │       └── logs/               # Integration logs viewer
 │   │   └── api/                        # API routes
 │   │       ├── submit/                 # Step 1, 2, 3 endpoints
 │   │       ├── manage/                 # Send-code, verify, reschedule, cancel
@@ -334,6 +365,10 @@ nexus-scheduler/
 │       │   ├── hubspot.ts              # HubSpot API client
 │       │   ├── google-calendar.ts      # Google Calendar client
 │       │   └── resend.ts               # Email (verification codes)
+│       ├── i18n/
+│       │   ├── index.ts                # Locale detection
+│       │   ├── TranslationContext.tsx  # React context & hook
+│       │   └── translations/           # Language files (11 languages)
 │       └── utils/                      # Helpers
 ├── public/
 │   └── tracker.js                      # Embeddable tracking script
@@ -375,6 +410,8 @@ nexus-scheduler/
 | GET/POST | `/api/calendar-config` | Get/update calendar config |
 | POST | `/api/bookings/exclude` | Preview/apply booking exclusions |
 | DELETE | `/api/delete-test-bookings` | Delete test mode bookings |
+| GET | `/api/admin/logs` | Fetch integration logs (HubSpot, GCal, Email) |
+| POST | `/api/admin/setup-logs` | Initialize integration_logs table |
 | GET/POST | `/api/debug` | Debug info & integration tests |
 
 ---
@@ -392,6 +429,7 @@ nexus-scheduler/
 | `bookings` | Completed bookings with all data |
 | `slot_locks` | Prevent double-booking race conditions |
 | `verification_codes` | Email verification codes |
+| `integration_logs` | API call logs for debugging |
 | `settings` | Key-value app settings |
 
 ---
@@ -412,6 +450,10 @@ nexus-scheduler/
 - Creates/updates contacts through booking flow
 - Creates deals and meeting engagements
 - Syncs deal stages back to local database
+- **Meeting outcome sync** — When bookings are cancelled or rescheduled:
+  - Cancelled → Sets `hs_meeting_outcome` to `"CANCELED"`
+  - Rescheduled → Updates times and sets `hs_meeting_outcome` to `"RESCHEDULED"`
+  - Enables HubSpot workflows to unenroll contacts from reminder sequences
 
 ### Resend
 
@@ -436,7 +478,16 @@ nexus-scheduler/
 
 ---
 
-## Double-Booking Prevention
+## Booking Rules
+
+### 24-Hour Advance Booking
+
+All available slots are at least **24 hours in the future**. This ensures:
+- Host has time to prepare for meetings
+- Email reminder sequences have time to send
+- No last-minute bookings that could be missed
+
+### Double-Booking Prevention
 
 The system uses two layers to prevent double-bookings:
 
@@ -458,6 +509,19 @@ When enabled in Admin Settings:
 - Bookings skip Google Calendar integration
 - Bookings are marked with `is_test = 1`
 - Test bookings can be bulk deleted later
+
+---
+
+## QA Testing
+
+A detailed QA checklist is available at `docs/QA-CHECKLIST.md` for external team members to test the booking funnel weekly.
+
+The checklist covers:
+- Complete lead journey testing
+- Email verification flow
+- Cancel and reschedule functionality
+- HubSpot data validation
+- Recommended testing schedule (Thursday-Saturday for full email sequence coverage)
 
 ---
 
