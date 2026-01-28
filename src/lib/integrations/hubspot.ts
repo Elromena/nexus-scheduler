@@ -225,7 +225,7 @@ export class HubSpotClient {
           to: { id: contactId },
           types: [{
             associationCategory: 'HUBSPOT_DEFINED',
-            associationTypeId: 194 // Contact to Meeting association
+            associationTypeId: 200 // Meeting to Contact association (meeting_to_contact)
           }]
         }]
       });
