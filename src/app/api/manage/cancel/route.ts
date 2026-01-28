@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { getHubSpotClient } from '@/lib/integrations/hubspot';
 import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
@@ -85,6 +86,18 @@ export async function POST(request: NextRequest) {
       await db.delete(slotLocks).where(eq(slotLocks.id, bookingId));
     } catch (lockError) {
       console.error('Failed to delete slot lock:', lockError);
+    }
+
+    // Cancel meeting in HubSpot (so reminder workflows stop)
+    if (booking.hubspotMeetingId && env.HUBSPOT_ACCESS_TOKEN) {
+      try {
+        const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN);
+        await hubspot.cancelMeeting(booking.hubspotMeetingId);
+        console.log('HubSpot meeting cancelled:', booking.hubspotMeetingId);
+      } catch (hubspotError) {
+        console.error('Failed to cancel HubSpot meeting:', hubspotError);
+        // Continue anyway - database update is more important
+      }
     }
 
     // Update booking status in database

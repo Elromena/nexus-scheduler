@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/db/schema';
 import { getGoogleCalendarClient } from '@/lib/integrations/google-calendar';
+import { getHubSpotClient } from '@/lib/integrations/hubspot';
 import { slotLocks } from '@/lib/db/slot-locks';
 
 export async function POST(request: NextRequest) {
@@ -183,6 +184,21 @@ export async function POST(request: NextRequest) {
         endTime,
         timeZone: hostTimezone,
       });
+
+      // Update meeting in HubSpot (so reminder workflows use new time)
+      if (booking.hubspotMeetingId && env.HUBSPOT_ACCESS_TOKEN) {
+        try {
+          const hubspot = getHubSpotClient(env.HUBSPOT_ACCESS_TOKEN);
+          // Convert to ISO format for HubSpot
+          const hubspotStartTime = new Date(`${newDate}T${newTime}:00`).toISOString();
+          const hubspotEndTime = new Date(endTime).toISOString();
+          await hubspot.rescheduleMeeting(booking.hubspotMeetingId, hubspotStartTime, hubspotEndTime);
+          console.log('HubSpot meeting rescheduled:', booking.hubspotMeetingId);
+        } catch (hubspotError) {
+          console.error('Failed to reschedule HubSpot meeting:', hubspotError);
+          // Continue anyway - Google Calendar is the source of truth
+        }
+      }
     } catch (calError) {
       console.error('Failed to update Google Calendar event:', calError);
       // Roll back lock to previous slot

@@ -242,6 +242,41 @@ export class HubSpotClient {
   }
 
   /**
+   * Update a meeting engagement (for reschedule/cancel)
+   */
+  async updateMeeting(meetingId: string, properties: Partial<HubSpotMeetingProperties>): Promise<boolean> {
+    try {
+      await this.request(`/objects/meetings/${meetingId}`, 'PATCH', { properties });
+      console.log('HubSpot meeting updated:', meetingId);
+      return true;
+    } catch (error) {
+      console.error('HubSpot update meeting error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Cancel a meeting (set outcome to CANCELED)
+   */
+  async cancelMeeting(meetingId: string): Promise<boolean> {
+    return this.updateMeeting(meetingId, {
+      hs_meeting_outcome: 'CANCELED',
+    });
+  }
+
+  /**
+   * Reschedule a meeting (update times)
+   */
+  async rescheduleMeeting(meetingId: string, newStartTime: string, newEndTime: string): Promise<boolean> {
+    return this.updateMeeting(meetingId, {
+      hs_timestamp: newStartTime,
+      hs_meeting_start_time: newStartTime,
+      hs_meeting_end_time: newEndTime,
+      hs_meeting_outcome: 'RESCHEDULED',
+    });
+  }
+
+  /**
    * Update contact lifecycle stage
    */
   async updateLifecycleStage(contactId: string, stage: string): Promise<boolean> {
